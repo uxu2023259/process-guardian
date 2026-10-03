@@ -1,0 +1,8 @@
+bin/
+obj/
+PLUGIN/
+.tools/
+.vs/
+*.user
+*.suo
+*.log
