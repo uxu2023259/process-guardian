@@ -7,9 +7,7 @@ namespace ProcessGuardian.Services;
 
 public sealed class ProcessSupervisor : IAsyncDisposable
 {
-    private const int FailureLimit = 5;
-    private static readonly TimeSpan ReconcileInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan StableRunPeriod = TimeSpan.FromMinutes(5);
+    private readonly ProcessSupervisorOptions _options;
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppLogger _logger;
     private readonly object _sync = new();
@@ -26,11 +24,14 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private Task? _monitorTask;
     private bool _disposed;
 
-    public ProcessSupervisor(AppSettings settings, JsonSettingsStore settingsStore, AppLogger logger)
+    public ProcessSupervisor(AppSettings settings, JsonSettingsStore settingsStore, AppLogger logger,
+        ProcessSupervisorOptions? options = null)
     {
         _settings = settings;
         _settingsStore = settingsStore;
         _logger = logger;
+        _options = options ?? ProcessSupervisorOptions.Default;
+        _options.Validate();
         foreach (var definition in settings.Programs)
         {
             if (definition.Id == Guid.Empty || _targets.ContainsKey(definition.Id)) continue;
@@ -180,7 +181,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                try { await _wake.Reader.ReadAsync(cancellationToken).AsTask().WaitAsync(ReconcileInterval, cancellationToken); }
+                try { await _wake.Reader.ReadAsync(cancellationToken).AsTask().WaitAsync(_options.ReconcileInterval, cancellationToken); }
                 catch (TimeoutException) { }
                 catch (ChannelClosedException) { return; }
 
@@ -212,12 +213,12 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             if (!exited)
             {
                 if (!runtime.StabilityReset && runtime.StartedAt is { } started &&
-                    DateTimeOffset.UtcNow - started >= StableRunPeriod)
+                    DateTimeOffset.UtcNow - started >= _options.StableRunPeriod)
                 {
                     runtime.FailureCount = 0;
                     runtime.StabilityReset = true;
                     await _logger.WriteAsync(LogSeverity.Information, runtime.Definition.Name,
-                        "已稳定运行 5 分钟，连续失败计数已清零。", cancellationToken);
+                        $"已稳定运行 {_options.StableRunPeriod.TotalMinutes:0.##} 分钟，连续失败计数已清零。", cancellationToken);
                 }
                 return;
             }
@@ -226,7 +227,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             DetachProcess(runtime);
             runtime.Process.Dispose();
             runtime.Process = null;
-            if (runtime.StartedAt is { } startedAt && DateTimeOffset.UtcNow - startedAt >= StableRunPeriod)
+            if (runtime.StartedAt is { } startedAt && DateTimeOffset.UtcNow - startedAt >= _options.StableRunPeriod)
                 runtime.FailureCount = 0;
             await RegisterFailureAsync(runtime, $"程序意外退出（退出码 {exitCode}）", cancellationToken);
         }
@@ -293,23 +294,25 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         runtime.FailureCount++;
         runtime.RestartCount++;
         runtime.NextAttempt = null;
-        if (runtime.FailureCount >= FailureLimit)
+        if (runtime.FailureCount >= _options.FailureLimit)
         {
             runtime.Definition.Enabled = false;
-            Publish(runtime, ProgramState.PausedAfterFailures, "连续失败 5 次，已自动暂停");
+            Publish(runtime, ProgramState.PausedAfterFailures, $"连续失败 {_options.FailureLimit} 次，已自动暂停");
             await _logger.WriteAsync(LogSeverity.Error, runtime.Definition.Name,
-                $"{reason} 达到连续失败上限，守护已暂停。", cancellationToken);
-            NotificationRequested?.Invoke(this, $"{runtime.Definition.Name} 连续失败 5 次，守护已暂停。请检查程序路径、权限或启动条件。");
+                $"{reason} 达到连续失败上限 {_options.FailureLimit} 次，守护已暂停。", cancellationToken);
+            NotificationRequested?.Invoke(this, $"{runtime.Definition.Name} 连续失败 {_options.FailureLimit} 次，守护已暂停。请检查程序路径、权限或启动条件。");
             await SaveProgramsAsync(cancellationToken);
             return;
         }
 
-        var delaySeconds = Math.Min(2 * Math.Pow(2, runtime.FailureCount - 1), 60);
-        runtime.NextAttempt = DateTimeOffset.UtcNow.AddSeconds(delaySeconds);
-        Publish(runtime, ProgramState.WaitingToRestart, $"{reason} · {delaySeconds:0} 秒后重试");
+        var delay = TimeSpan.FromTicks((long)Math.Min(
+            _options.InitialRetryDelay.Ticks * Math.Pow(2, runtime.FailureCount - 1),
+            _options.MaximumRetryDelay.Ticks));
+        runtime.NextAttempt = DateTimeOffset.UtcNow.Add(delay);
+        Publish(runtime, ProgramState.WaitingToRestart, $"{reason} · {Math.Ceiling(delay.TotalSeconds):0} 秒后重试");
         await _logger.WriteAsync(LogSeverity.Warning, runtime.Definition.Name,
-            $"{reason} 将在 {delaySeconds:0} 秒后第 {runtime.FailureCount + 1} 次启动。", cancellationToken);
-        NotificationRequested?.Invoke(this, $"{runtime.Definition.Name} 已退出，将在 {delaySeconds:0} 秒后重启。");
+            $"{reason} 将在 {delay.TotalSeconds:0.###} 秒后第 {runtime.FailureCount + 1} 次启动。", cancellationToken);
+        NotificationRequested?.Invoke(this, $"{runtime.Definition.Name} 已退出，将在 {Math.Ceiling(delay.TotalSeconds):0} 秒后重启。");
     }
 
     private async Task StopProcessAsync(TargetRuntime runtime, CancellationToken cancellationToken)

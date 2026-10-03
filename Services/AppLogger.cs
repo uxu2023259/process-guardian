@@ -5,18 +5,25 @@ namespace ProcessGuardian.Services;
 
 public sealed class AppLogger
 {
-    private const long MaxFileBytes = 2 * 1024 * 1024;
-    private const int ArchiveCount = 5;
+    private const long DefaultMaxFileBytes = 2 * 1024 * 1024;
+    private const int DefaultArchiveCount = 5;
     private const int MemoryEntryCount = 150;
-    private readonly string _directory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ProcessGuardian", "Logs");
+    private readonly string _directory;
     private readonly string _filePath;
+    private readonly long _maxFileBytes;
+    private readonly int _archiveCount;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Queue<LogEntry> _recent = new();
 
-    public AppLogger()
+    public AppLogger(string? directory = null, long maxFileBytes = DefaultMaxFileBytes,
+        int archiveCount = DefaultArchiveCount)
     {
+        if (maxFileBytes < 1) throw new ArgumentOutOfRangeException(nameof(maxFileBytes));
+        if (archiveCount < 1) throw new ArgumentOutOfRangeException(nameof(archiveCount));
+        _directory = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ProcessGuardian", "Logs");
+        _maxFileBytes = maxFileBytes;
+        _archiveCount = archiveCount;
         Directory.CreateDirectory(_directory);
         _filePath = Path.Combine(_directory, "process-guardian.log");
         LoadRecentEntries();
@@ -73,10 +80,10 @@ public sealed class AppLogger
 
     private void RotateIfNeeded(long incomingBytes)
     {
-        if (!File.Exists(_filePath) || new FileInfo(_filePath).Length + incomingBytes <= MaxFileBytes) return;
-        var oldest = _filePath + "." + ArchiveCount;
+        if (!File.Exists(_filePath) || new FileInfo(_filePath).Length + incomingBytes <= _maxFileBytes) return;
+        var oldest = _filePath + "." + _archiveCount;
         if (File.Exists(oldest)) File.Delete(oldest);
-        for (var index = ArchiveCount - 1; index >= 1; index--)
+        for (var index = _archiveCount - 1; index >= 1; index--)
         {
             var source = _filePath + "." + index;
             if (File.Exists(source)) File.Move(source, _filePath + "." + (index + 1));

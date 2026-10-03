@@ -2,6 +2,9 @@ bin/
 obj/
 PLUGIN/
 .tools/
+.artifacts/
+tests/**/bin/
+tests/**/obj/
 .vs/
 *.user
 *.suo

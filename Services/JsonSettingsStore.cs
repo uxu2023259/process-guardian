@@ -6,10 +6,14 @@ namespace ProcessGuardian.Services;
 public sealed class JsonSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private readonly string _path = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "ProcessGuardian", "settings.json");
+    private readonly string _path;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public JsonSettingsStore(string? path = null)
+    {
+        _path = path ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "ProcessGuardian", "settings.json");
+    }
 
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {

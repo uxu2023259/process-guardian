@@ -10,11 +10,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ProcessGuardian</AssemblyName>
     <RootNamespace>ProcessGuardian</RootNamespace>
-    <Version>0.1.11</Version>
-    <FileVersion>0.1.11.0</FileVersion>
-    <InformationalVersion>0.1.11</InformationalVersion>
+    <Version>0.1.17</Version>
+    <FileVersion>0.1.17.0</FileVersion>
+    <InformationalVersion>0.1.17</InformationalVersion>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <!-- WPF uses PerMonitorV2 from app.manifest; WinForms is limited to tray and folder-picker APIs. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>
