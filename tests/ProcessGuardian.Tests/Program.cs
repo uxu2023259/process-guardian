@@ -227,15 +227,29 @@ static Task SinglePageUiAsync(string root)
     Check(!mainMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
         && !mainMarkup.Contains("x:Name=\"PathBox\"", StringComparison.Ordinal),
         "program entry fields should only appear in the add dialog");
-    var addDialogPath = Path.Combine(projectRoot, "AddProgramWindow.xaml");
-    Check(File.Exists(addDialogPath), "the add-program dialog is missing");
-    var addDialogMarkup = XDocument.Load(addDialogPath).ToString(SaveOptions.DisableFormatting);
-    Check(addDialogMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
-        && addDialogMarkup.Contains("x:Name=\"PathBox\"", StringComparison.Ordinal),
-        "the add dialog is missing program entry fields");
-    Check(addDialogMarkup.Contains("AttachExistingBox", StringComparison.Ordinal)
-        && addDialogMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
-        "the add dialog is missing its attach-existing option or submit action");
+    Check(mainMarkup.Contains("x:Name=\"AddProgramOverlay\"", StringComparison.Ordinal)
+        && mainMarkup.Contains("ui:AddProgramPanel", StringComparison.Ordinal),
+        "the add form is not embedded in the main window overlay");
+    var addPanelPath = Path.Combine(projectRoot, "AddProgramPanel.xaml");
+    Check(File.Exists(addPanelPath), "the embedded add-program panel is missing");
+    var addPanelDocument = XDocument.Load(addPanelPath);
+    Check(addPanelDocument.Root?.Name.LocalName == "UserControl",
+        "the add form should be an inline user control, not another window");
+    var addPanelMarkup = addPanelDocument.ToString(SaveOptions.DisableFormatting);
+    Check(addPanelMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
+        && addPanelMarkup.Contains("x:Name=\"PathBox\"", StringComparison.Ordinal),
+        "the embedded add panel is missing program entry fields");
+    Check(addPanelMarkup.Contains("AttachExistingBox", StringComparison.Ordinal)
+        && addPanelMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
+        "the embedded add panel is missing its attach-existing option or submit action");
+    var mainCode = File.ReadAllText(Path.Combine(projectRoot, "MainWindow.xaml.cs"));
+    Check(mainCode.Contains("CreateAnimation(0, 1", StringComparison.Ordinal)
+        && mainCode.Contains("EasingMode.EaseOut", StringComparison.Ordinal)
+        && mainCode.Contains("CreateAnimation(12, 0, 220", StringComparison.Ordinal)
+        && mainCode.Contains("Key.Escape", StringComparison.Ordinal)
+        && !mainCode.Contains("ShowDialog", StringComparison.Ordinal)
+        && mainMarkup.Contains("AddProgramOverlay_MouseDown", StringComparison.Ordinal),
+        "the embedded panel is missing its entrance animation or Escape dismissal");
     var themeMarkup = XDocument.Load(Path.Combine(projectRoot, "App.xaml")).ToString(SaveOptions.DisableFormatting);
     Check(themeMarkup.Contains("Accent\" Color=\"#0078D4", StringComparison.Ordinal)
         && themeMarkup.Contains("#E5F1FB", StringComparison.Ordinal),

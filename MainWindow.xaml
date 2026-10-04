@@ -2,10 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:ProcessGuardian.Controls"
+        xmlns:ui="clr-namespace:ProcessGuardian"
         Title="进程守护器" Width="820" Height="690" MinWidth="760" MinHeight="560"
         WindowStartupLocation="CenterScreen" Background="#F3F3F3"
         FontFamily="Segoe UI, Microsoft YaHei UI" WindowStyle="SingleBorderWindow"
-        ResizeMode="CanResizeWithGrip" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        ResizeMode="CanResizeWithGrip" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        PreviewKeyDown="MainWindow_PreviewKeyDown">
   <Grid>
     <Grid Margin="24,20,24,20">
       <Grid.RowDefinitions>
@@ -128,6 +130,21 @@
           </StackPanel>
         </Border>
       </Grid>
+    </Grid>
+
+    <Grid x:Name="AddProgramOverlay" Panel.ZIndex="10" Visibility="Collapsed"
+          Background="#66000000" Opacity="0" MouseDown="AddProgramOverlay_MouseDown">
+      <Border x:Name="PopupCard" Width="560" MaxHeight="600" Background="White"
+              BorderBrush="#8A8886" BorderThickness="1" HorizontalAlignment="Center"
+              VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Opacity="0">
+        <Border.RenderTransform>
+          <TranslateTransform X="0" Y="10"/>
+        </Border.RenderTransform>
+        <ScrollViewer MaxHeight="598" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ui:AddProgramPanel x:Name="AddPanel"/>
+        </ScrollViewer>
+      </Border>
     </Grid>
   </Grid>
 </Window>

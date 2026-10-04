@@ -6,15 +6,30 @@ using Forms = System.Windows.Forms;
 
 namespace ProcessGuardian;
 
-public partial class AddProgramWindow : Window
+public partial class AddProgramPanel : System.Windows.Controls.UserControl
 {
-    public AddProgramWindow()
+    public AddProgramPanel()
     {
         InitializeComponent();
-        Loaded += (_, _) => NameBox.Focus();
     }
 
-    public ProgramDefinition? Result { get; private set; }
+    public event Action<ProgramDefinition>? AddRequested;
+    public event Action? CancelRequested;
+
+    public void ResetForm()
+    {
+        NameBox.Clear();
+        PathBox.Clear();
+        ArgumentsBox.Clear();
+        WorkingDirectoryBox.Clear();
+        EnabledBox.IsChecked = true;
+        AttachExistingBox.IsChecked = false;
+        FormMessage.Text = "";
+    }
+
+    public void FocusName() => NameBox.Focus();
+
+    public void ShowError(string message) => FormMessage.Text = message;
 
     private void BrowseExecutable_Click(object sender, RoutedEventArgs e)
     {
@@ -24,7 +39,7 @@ public partial class AddProgramWindow : Window
             Filter = "Windows 程序 (*.exe)|*.exe|所有文件 (*.*)|*.*",
             CheckFileExists = true
         };
-        if (dialog.ShowDialog(this) != true) return;
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
 
         PathBox.Text = dialog.FileName;
         if (string.IsNullOrWhiteSpace(NameBox.Text))
@@ -48,24 +63,24 @@ public partial class AddProgramWindow : Window
         var workingDirectory = Environment.ExpandEnvironmentVariables(WorkingDirectoryBox.Text.Trim());
         if (string.IsNullOrWhiteSpace(name))
         {
-            ShowFormMessage("请填写显示名称。");
+            ShowError("请填写显示名称。");
             NameBox.Focus();
             return;
         }
         if (!Path.IsPathFullyQualified(executable) || !File.Exists(executable))
         {
-            ShowFormMessage("请选择一个存在的程序文件。");
+            ShowError("请选择一个存在的程序文件。");
             PathBox.Focus();
             return;
         }
         if (!string.IsNullOrWhiteSpace(workingDirectory) && !Directory.Exists(workingDirectory))
         {
-            ShowFormMessage("工作目录不存在，请重新选择或留空。");
+            ShowError("工作目录不存在，请重新选择或留空。");
             WorkingDirectoryBox.Focus();
             return;
         }
 
-        Result = new ProgramDefinition
+        var definition = new ProgramDefinition
         {
             Name = name,
             ExecutablePath = executable,
@@ -74,10 +89,8 @@ public partial class AddProgramWindow : Window
             Enabled = EnabledBox.IsChecked == true,
             AttachExisting = AttachExistingBox.IsChecked == true
         };
-        DialogResult = true;
+        AddRequested?.Invoke(definition);
     }
 
-    private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
-
-    private void ShowFormMessage(string message) => FormMessage.Text = message;
+    private void Cancel_Click(object sender, RoutedEventArgs e) => CancelRequested?.Invoke();
 }
