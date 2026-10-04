@@ -35,6 +35,7 @@ public sealed class ProgramRowViewModel : ObservableObject
     public string StatusDetail => _status.Detail;
     public string RestartCountText => _status.RestartCount == 1 ? "已恢复 1 次" : $"已恢复 {_status.RestartCount} 次";
     public string ToggleText => Enabled ? "停止" : "启动";
+    public bool IsLoading => _status.State is ProgramState.Starting or ProgramState.WaitingToRestart;
     public string StateGlyph => _status.State switch
     {
         ProgramState.Running => "●",
@@ -56,6 +57,7 @@ public sealed class ProgramRowViewModel : ObservableObject
         Raise(nameof(StatusDetail));
         Raise(nameof(RestartCountText));
         Raise(nameof(StateGlyph));
+        Raise(nameof(IsLoading));
         Raise(nameof(Enabled));
         Raise(nameof(ToggleText));
     }

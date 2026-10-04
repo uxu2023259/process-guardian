@@ -218,8 +218,10 @@ static Task SinglePageUiAsync(string root)
         "main window is wider than the compact layout limit");
     Check(double.Parse((string?)mainWindow.Attribute("Height") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 720,
         "main window is taller than the compact layout limit");
-    Check(mainMarkup.Contains("程序列表", StringComparison.Ordinal), "main screen is missing the program list");
+    Check(mainMarkup.Contains("受保护的程序", StringComparison.Ordinal), "main screen is missing the protected-program heading");
     Check(mainMarkup.Contains("Click=\"AddProgram_Click\"", StringComparison.Ordinal), "main screen is missing its add button");
+    Check(mainMarkup.Contains("WindowStyle=\"SingleBorderWindow\"", StringComparison.Ordinal),
+        "main screen is not using the native Windows title bar");
     Check(mainMarkup.Contains("DockPanel LastChildFill=\"False\"", StringComparison.Ordinal),
         "the header action is not explicitly right-aligned");
     Check(!mainMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
@@ -234,6 +236,19 @@ static Task SinglePageUiAsync(string root)
     Check(addDialogMarkup.Contains("AttachExistingBox", StringComparison.Ordinal)
         && addDialogMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
         "the add dialog is missing its attach-existing option or submit action");
+    var themeMarkup = XDocument.Load(Path.Combine(projectRoot, "App.xaml")).ToString(SaveOptions.DisableFormatting);
+    Check(themeMarkup.Contains("Accent\" Color=\"#0078D4", StringComparison.Ordinal)
+        && themeMarkup.Contains("#E5F1FB", StringComparison.Ordinal),
+        "Windows-style accent and hover colors are missing");
+    Check(mainMarkup.Contains("controls:ProgressRing", StringComparison.Ordinal)
+        && mainMarkup.Contains("{Binding IsLoading}", StringComparison.Ordinal),
+        "loading states are not using the shared progress ring");
+    var ringMarkup = XDocument.Load(Path.Combine(projectRoot, "Controls", "ProgressRing.xaml"))
+        .ToString(SaveOptions.DisableFormatting);
+    Check(ringMarkup.Contains("DoubleAnimation", StringComparison.Ordinal)
+        && ringMarkup.Contains("To=\"360\"", StringComparison.Ordinal)
+        && ringMarkup.Contains("RepeatBehavior=\"Forever\"", StringComparison.Ordinal),
+        "Windows-style progress ring animation is incomplete");
     Check(!mainMarkup.Contains("系统总览", StringComparison.Ordinal)
         && !mainMarkup.Contains("实时活动", StringComparison.Ordinal),
         "dashboard or activity panels remain in the main window");

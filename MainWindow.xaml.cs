@@ -12,19 +12,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
-        AppVersion.Text = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "";
         Loaded += (_, _) => FitToWorkArea();
-        StateChanged += (_, _) => MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
     }
 
-    private void Minimize_Click(object sender, RoutedEventArgs e) => MinimizeToTaskbar();
-
     public void MinimizeToTaskbar() => WindowState = WindowState.Minimized;
-
-    private void MaximizeRestore_Click(object sender, RoutedEventArgs e) =>
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void FitToWorkArea()
     {
