@@ -211,17 +211,31 @@ static async Task ControlPipeAsync(string root)
 static Task SinglePageUiAsync(string root)
 {
     var projectRoot = Path.GetFullPath(Path.Combine(root, "..", ".."));
-    var document = XDocument.Load(Path.Combine(projectRoot, "MainWindow.xaml"));
-    var markup = document.ToString(SaveOptions.DisableFormatting);
-    var window = document.Root ?? throw new InvalidOperationException("main window markup has no root element");
-    Check(double.Parse((string?)window.Attribute("Width") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 850,
+    var mainDocument = XDocument.Load(Path.Combine(projectRoot, "MainWindow.xaml"));
+    var mainMarkup = mainDocument.ToString(SaveOptions.DisableFormatting);
+    var mainWindow = mainDocument.Root ?? throw new InvalidOperationException("main window markup has no root element");
+    Check(double.Parse((string?)mainWindow.Attribute("Width") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 850,
         "main window is wider than the compact layout limit");
-    Check(double.Parse((string?)window.Attribute("Height") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 720,
+    Check(double.Parse((string?)mainWindow.Attribute("Height") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 720,
         "main window is taller than the compact layout limit");
-    Check(markup.Contains("Text=\"添加程序\"", StringComparison.Ordinal), "single page is missing its add-program heading");
-    Check(markup.Contains("守护列表", StringComparison.Ordinal), "single page is missing the in-place target list");
-    Check(markup.Contains("AttachExistingBox", StringComparison.Ordinal), "single page is missing process attachment option");
-    Check(!markup.Contains("系统总览", StringComparison.Ordinal) && !markup.Contains("实时活动", StringComparison.Ordinal),
+    Check(mainMarkup.Contains("程序列表", StringComparison.Ordinal), "main screen is missing the program list");
+    Check(mainMarkup.Contains("Click=\"AddProgram_Click\"", StringComparison.Ordinal), "main screen is missing its add button");
+    Check(mainMarkup.Contains("DockPanel LastChildFill=\"False\"", StringComparison.Ordinal),
+        "the header action is not explicitly right-aligned");
+    Check(!mainMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
+        && !mainMarkup.Contains("x:Name=\"PathBox\"", StringComparison.Ordinal),
+        "program entry fields should only appear in the add dialog");
+    var addDialogPath = Path.Combine(projectRoot, "AddProgramWindow.xaml");
+    Check(File.Exists(addDialogPath), "the add-program dialog is missing");
+    var addDialogMarkup = XDocument.Load(addDialogPath).ToString(SaveOptions.DisableFormatting);
+    Check(addDialogMarkup.Contains("x:Name=\"NameBox\"", StringComparison.Ordinal)
+        && addDialogMarkup.Contains("x:Name=\"PathBox\"", StringComparison.Ordinal),
+        "the add dialog is missing program entry fields");
+    Check(addDialogMarkup.Contains("AttachExistingBox", StringComparison.Ordinal)
+        && addDialogMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
+        "the add dialog is missing its attach-existing option or submit action");
+    Check(!mainMarkup.Contains("系统总览", StringComparison.Ordinal)
+        && !mainMarkup.Contains("实时活动", StringComparison.Ordinal),
         "dashboard or activity panels remain in the main window");
     Check(!File.Exists(Path.Combine(projectRoot, "ProgramEditorWindow.xaml")),
         "the separate program-editor screen was not removed");
