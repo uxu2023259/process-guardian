@@ -15,6 +15,7 @@ public sealed class ProgramDefinition
     public string Arguments { get; set; } = "";
     public string WorkingDirectory { get; set; } = "";
     public bool Enabled { get; set; } = true;
+    public bool AttachExisting { get; set; }
 
     public ProgramDefinition Copy() => new()
     {
@@ -23,7 +24,8 @@ public sealed class ProgramDefinition
         ExecutablePath = ExecutablePath,
         Arguments = Arguments,
         WorkingDirectory = WorkingDirectory,
-        Enabled = Enabled
+        Enabled = Enabled,
+        AttachExisting = AttachExisting
     };
 }
 

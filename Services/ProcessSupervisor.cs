@@ -168,7 +168,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             runtime.Definition.Enabled = true;
             runtime.FailureCount = 0;
             runtime.NextAttempt = null;
-            await StopProcessAsync(runtime, cancellationToken);
+            await StopProcessAsync(runtime, cancellationToken, terminateAttached: true);
             if (_monitorTask is not null) await LaunchAsync(runtime, cancellationToken);
         }
         finally { runtime.Gate.Release(); }
@@ -227,6 +227,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             DetachProcess(runtime);
             runtime.Process.Dispose();
             runtime.Process = null;
+            runtime.IsAttached = false;
             if (runtime.StartedAt is { } startedAt && DateTimeOffset.UtcNow - startedAt >= _options.StableRunPeriod)
                 runtime.FailureCount = 0;
             await RegisterFailureAsync(runtime, $"程序意外退出（退出码 {exitCode}）", cancellationToken);
@@ -247,6 +248,15 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 
         try
         {
+            if (runtime.Definition.AttachExisting && TryAttachExisting(executable, out var existing))
+            {
+                TrackProcess(runtime, existing, isAttached: true);
+                Publish(runtime, ProgramState.Running, $"已接管现有程序 · PID {existing.Id}");
+                await _logger.WriteAsync(LogSeverity.Information, runtime.Definition.Name,
+                    $"已接管已运行程序（PID {existing.Id}）。", cancellationToken);
+                return;
+            }
+
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -273,12 +283,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 return;
             }
 
-            runtime.Process = process;
-            runtime.ExitHandler = handler;
-            runtime.ExitObserved = false;
-            runtime.StartedAt = DateTimeOffset.UtcNow;
-            runtime.StabilityReset = false;
-            runtime.NextAttempt = null;
+            TrackProcess(runtime, process, isAttached: false, handler);
             Publish(runtime, ProgramState.Running, $"正在运行 · PID {process.Id}");
             await _logger.WriteAsync(LogSeverity.Information, runtime.Definition.Name,
                 $"程序已启动（PID {process.Id}）。", cancellationToken);
@@ -315,7 +320,8 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         NotificationRequested?.Invoke(this, $"{runtime.Definition.Name} 已退出，将在 {Math.Ceiling(delay.TotalSeconds):0} 秒后重启。");
     }
 
-    private async Task StopProcessAsync(TargetRuntime runtime, CancellationToken cancellationToken)
+    private async Task StopProcessAsync(TargetRuntime runtime, CancellationToken cancellationToken,
+        bool terminateAttached = false)
     {
         var process = runtime.Process;
         if (process is null) return;
@@ -323,6 +329,15 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         runtime.Process = null;
         try
         {
+            if (runtime.IsAttached && !terminateAttached)
+            {
+                runtime.IsAttached = false;
+                await _logger.WriteAsync(LogSeverity.Information, runtime.Definition.Name,
+                    "已暂停监控并保留原有程序运行。", cancellationToken);
+                return;
+            }
+
+            runtime.IsAttached = false;
             if (!process.HasExited)
             {
                 if (process.CloseMainWindow())
@@ -353,6 +368,68 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             runtime.Process.Exited -= runtime.ExitHandler;
         runtime.ExitHandler = null;
         runtime.ExitObserved = false;
+    }
+
+    private void TrackProcess(TargetRuntime runtime, Process process, bool isAttached,
+        EventHandler? handler = null)
+    {
+        handler ??= (_, _) =>
+        {
+            runtime.ExitObserved = true;
+            _wake.Writer.TryWrite(true);
+        };
+        process.EnableRaisingEvents = true;
+        if (isAttached) process.Exited += handler;
+        runtime.Process = process;
+        runtime.ExitHandler = handler;
+        runtime.ExitObserved = false;
+        runtime.StartedAt = DateTimeOffset.UtcNow;
+        runtime.StabilityReset = false;
+        runtime.NextAttempt = null;
+        runtime.IsAttached = isAttached;
+    }
+
+    private static bool TryAttachExisting(string executable, out Process process)
+    {
+        process = null!;
+        if (!File.Exists(executable)) return false;
+        var expectedPath = Path.GetFullPath(executable);
+        var processName = Path.GetFileNameWithoutExtension(expectedPath);
+        var candidates = new List<Process>();
+        foreach (var candidate in Process.GetProcessesByName(processName))
+        {
+            try
+            {
+                var candidatePath = candidate.MainModule?.FileName;
+                if (candidatePath is not null && string.Equals(Path.GetFullPath(candidatePath), expectedPath,
+                        StringComparison.OrdinalIgnoreCase) && !candidate.HasExited)
+                    candidates.Add(candidate);
+                else
+                    candidate.Dispose();
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            {
+                candidate.Dispose();
+            }
+        }
+
+        if (candidates.Count == 0) return false;
+        var selected = candidates
+            .OrderByDescending(candidate =>
+            {
+                try { return candidate.MainWindowHandle != IntPtr.Zero; }
+                catch (InvalidOperationException) { return false; }
+            })
+            .ThenBy(candidate =>
+            {
+                try { return candidate.StartTime; }
+                catch (InvalidOperationException) { return DateTime.MaxValue; }
+            })
+            .First();
+        foreach (var candidate in candidates)
+            if (!ReferenceEquals(candidate, selected)) candidate.Dispose();
+        process = selected;
+        return true;
     }
 
     private static int SafeExitCode(Process process)
@@ -421,6 +498,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         public Process? Process { get; set; }
         public EventHandler? ExitHandler { get; set; }
         public bool ExitObserved { get; set; }
+        public bool IsAttached { get; set; }
         public DateTimeOffset? StartedAt { get; set; }
         public bool StabilityReset { get; set; }
         public int FailureCount { get; set; }

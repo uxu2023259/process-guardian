@@ -14,8 +14,10 @@ public partial class App : System.Windows.Application
     private bool _exitRequested;
     private Forms.NotifyIcon? _trayIcon;
     private ProcessSupervisor? _supervisor;
+    private ProcessGuardianControlServer? _controlServer;
     private AppLogger? _logger;
     private MainWindow? _mainWindow;
+    private MainViewModel? _viewModel;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -43,8 +45,8 @@ public partial class App : System.Windows.Application
 
             _supervisor = new ProcessSupervisor(settings, store, _logger);
             _supervisor.NotificationRequested += OnNotificationRequested;
-            var viewModel = new MainViewModel(_supervisor, settings, store, startup, _logger, Dispatcher);
-            _mainWindow = new MainWindow(viewModel);
+            _viewModel = new MainViewModel(_supervisor, settings, store, startup, _logger, Dispatcher);
+            _mainWindow = new MainWindow(_viewModel);
             _mainWindow.Closing += OnMainWindowClosing;
             SetupTrayIcon();
 
@@ -52,12 +54,55 @@ public partial class App : System.Windows.Application
             _mainWindow.Show();
             if (e.Args.Any(argument => string.Equals(argument, "--startup", StringComparison.OrdinalIgnoreCase)))
                 _mainWindow.Hide();
+            _controlServer = new ProcessGuardianControlServer(HandleControlRequestAsync);
+            _controlServer.Start();
         }
         catch (Exception exception)
         {
             System.Windows.MessageBox.Show($"进程守护器启动失败：{exception.Message}", "启动失败",
                 System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             Shutdown();
+        }
+    }
+
+    private async Task<ProcessGuardianControlResponse> HandleControlRequestAsync(
+        ProcessGuardianControlRequest request, CancellationToken cancellationToken)
+    {
+        if (_supervisor is null || _viewModel is null)
+            return new ProcessGuardianControlResponse(false, "守护器尚未完成启动。");
+
+        switch (request.Command.ToLowerInvariant())
+        {
+            case "add":
+                var program = request.Program;
+                if (program is null || string.IsNullOrWhiteSpace(program.Name) ||
+                    !Path.IsPathFullyQualified(program.ExecutablePath) || !File.Exists(program.ExecutablePath))
+                    return new ProcessGuardianControlResponse(false, "程序名称或绝对路径无效，且目标文件必须存在。");
+                if (_supervisor.Programs.Any(existing => string.Equals(existing.Name, program.Name,
+                        StringComparison.OrdinalIgnoreCase) && string.Equals(existing.ExecutablePath,
+                        program.ExecutablePath, StringComparison.OrdinalIgnoreCase)))
+                    return new ProcessGuardianControlResponse(false, "同名程序和路径已存在。");
+                cancellationToken.ThrowIfCancellationRequested();
+                await _viewModel.AddAsync(program);
+                return new ProcessGuardianControlResponse(true, $"已添加并启用“{program.Name}”。");
+
+            case "list":
+                var statuses = _supervisor.Statuses.ToDictionary(status => status.Id);
+                var programs = _supervisor.Programs.Select(definition =>
+                {
+                    var status = statuses[definition.Id];
+                    return new ProcessGuardianControlProgram(definition.Id, definition.Name,
+                        definition.ExecutablePath, definition.Enabled, status.State,
+                        status.RestartCount, status.Detail);
+                }).ToArray();
+                return new ProcessGuardianControlResponse(true, $"共 {programs.Length} 个守护目标。", programs);
+
+            case "minimize":
+                await Dispatcher.InvokeAsync(() => _mainWindow?.MinimizeToTaskbar());
+                return new ProcessGuardianControlResponse(true, "守护器窗口已最小化。");
+
+            default:
+                return new ProcessGuardianControlResponse(false, "不支持的控制命令。");
         }
     }
 
@@ -114,6 +159,11 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_controlServer is not null)
+        {
+            try { _controlServer.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+            catch { }
+        }
         _trayIcon?.Dispose();
         if (_supervisor is not null)
         {

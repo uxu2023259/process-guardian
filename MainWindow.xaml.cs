@@ -21,6 +21,8 @@ public partial class MainWindow : Window
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
+    public void MinimizeToTaskbar() => WindowState = WindowState.Minimized;
+
     private void MaximizeRestore_Click(object sender, RoutedEventArgs e) =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 

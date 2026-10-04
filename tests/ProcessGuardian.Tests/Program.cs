@@ -25,6 +25,8 @@ try
     await runner.RunAsync("stable run resets consecutive failures", () => StableRunResetAsync(root));
     await runner.RunAsync("manual pause stops process and prevents restart", () => ManualPauseAsync(root));
     await runner.RunAsync("disposing supervisor leaves process running", () => DisposeLeavesProcessAsync(root));
+    await runner.RunAsync("attached running process is left alive when monitoring pauses", () => AttachExistingAsync(root));
+    await runner.RunAsync("local control pipe adds lists and minimizes", () => ControlPipeAsync(root));
     Console.WriteLine($"Tests: {runner.Passed} passed, {runner.Failed} failed");
 }
 finally
@@ -40,11 +42,12 @@ static async Task SettingsRoundTripAsync(string root)
     var path = TestPath(root, "settings-roundtrip", "settings.json");
     var store = new JsonSettingsStore(path);
     var original = new AppSettings { StartWithWindows = false };
-    original.Programs.Add(new ProgramDefinition { Name = "worker", ExecutablePath = "worker.exe", Arguments = "--quiet" });
+    original.Programs.Add(new ProgramDefinition { Name = "worker", ExecutablePath = "worker.exe", Arguments = "--quiet", AttachExisting = true });
     await store.SaveAsync(original);
     var actual = await store.LoadAsync();
     Check(!actual.StartWithWindows && actual.Programs.Count == 1, "settings fields were not preserved");
     Check(actual.Programs[0].Arguments == "--quiet" && actual.SchemaVersion == 1, "program data was not normalized");
+    Check(actual.Programs[0].AttachExisting, "attach-existing preference was not preserved");
 }
 
 static async Task CorruptSettingsAsync(string root)
@@ -125,6 +128,82 @@ static async Task DisposeLeavesProcessAsync(string root)
     await fixture.Supervisor.DisposeAsync();
     try { Check(IsAlive(pid), $"child PID {pid} exited when only the supervisor was disposed"); }
     finally { await fixture.DisposeAsync(); }
+}
+
+static async Task AttachExistingAsync(string root)
+{
+    var directory = TestPath(root, "attach-existing", "data");
+    Directory.CreateDirectory(directory);
+    var self = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate test runner executable.");
+    await using var supervisor = new ProcessSupervisor(new AppSettings(),
+        new JsonSettingsStore(Path.Combine(directory, "settings.json")),
+        new AppLogger(Path.Combine(directory, "logs")),
+        Options(failureLimit: 4, retryMs: 40, stableMs: 5000));
+    await supervisor.StartAsync();
+    var definition = new ProgramDefinition
+    {
+        Name = "attached-test", ExecutablePath = self, WorkingDirectory = AppContext.BaseDirectory,
+        Enabled = true, AttachExisting = true
+    };
+    await supervisor.AddAsync(definition);
+    var status = supervisor.Statuses.Single();
+    Check(status.State == ProgramState.Running && status.Detail.Contains($"PID {Environment.ProcessId}", StringComparison.Ordinal),
+        "supervisor did not attach to the current matching process");
+    await supervisor.SetEnabledAsync(definition.Id, enabled: false);
+    Check(!Process.GetCurrentProcess().HasExited, "pausing an attached process terminated it");
+}
+
+static async Task ControlPipeAsync(string root)
+{
+    var directory = TestPath(root, "control-pipe", "data");
+    Directory.CreateDirectory(directory);
+    var self = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate test runner executable.");
+    var supervisor = new ProcessSupervisor(new AppSettings(),
+        new JsonSettingsStore(Path.Combine(directory, "settings.json")),
+        new AppLogger(Path.Combine(directory, "logs")),
+        Options(failureLimit: 4, retryMs: 40, stableMs: 5000));
+    await supervisor.StartAsync();
+    var minimized = false;
+    var pipeName = "ProcessGuardian.Tests." + Guid.NewGuid().ToString("N");
+    await using var server = new ProcessGuardianControlServer(async (request, token) =>
+    {
+        switch (request.Command)
+        {
+            case "add" when request.Program is { } program:
+                await supervisor.AddAsync(program, token);
+                return new ProcessGuardianControlResponse(true, "added");
+            case "list":
+                var statuses = supervisor.Statuses.ToDictionary(value => value.Id);
+                var programs = supervisor.Programs.Select(program => new ProcessGuardianControlProgram(
+                    program.Id, program.Name, program.ExecutablePath, program.Enabled,
+                    statuses[program.Id].State, statuses[program.Id].RestartCount,
+                    statuses[program.Id].Detail)).ToArray();
+                return new ProcessGuardianControlResponse(true, "listed", programs);
+            case "minimize":
+                minimized = true;
+                return new ProcessGuardianControlResponse(true, "minimized");
+            default:
+                return new ProcessGuardianControlResponse(false, "invalid");
+        }
+    }, pipeName);
+    server.Start();
+    try
+    {
+        var definition = new ProgramDefinition
+        {
+            Name = "pipe-attached-test", ExecutablePath = self,
+            WorkingDirectory = AppContext.BaseDirectory, Enabled = true, AttachExisting = true
+        };
+        var added = await ProcessGuardianControlClient.SendAsync(new ProcessGuardianControlRequest("add", definition), pipeName);
+        Check(added.Success, "pipe add request failed");
+        var listed = await ProcessGuardianControlClient.SendAsync(new ProcessGuardianControlRequest("list"), pipeName);
+        Check(listed.Success && listed.Programs?.Single().Name == definition.Name,
+            "pipe list response did not return the registered target");
+        var minimizedResponse = await ProcessGuardianControlClient.SendAsync(new ProcessGuardianControlRequest("minimize"), pipeName);
+        Check(minimizedResponse.Success && minimized, "pipe minimize request was not dispatched");
+        await supervisor.SetEnabledAsync(definition.Id, false);
+    }
+    finally { await supervisor.DisposeAsync(); }
 }
 
 static ProcessSupervisorOptions Options(int failureLimit, int retryMs, int stableMs) => new()
