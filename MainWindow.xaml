@@ -50,11 +50,8 @@
                       <ColumnDefinition Width="Auto"/>
                       <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border Width="28" Height="28" Background="#0078D4"
-                            VerticalAlignment="Center">
-                      <TextBlock Text="P" FontSize="14" FontWeight="SemiBold" Foreground="White"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                    <Image Source="{Binding ProgramIcon}" Width="28" Height="28"
+                           VerticalAlignment="Center" Stretch="Uniform"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="7,0,12,0">
                       <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
                                  Foreground="#1F1F1F" TextTrimming="CharacterEllipsis"/>
@@ -65,8 +62,8 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
                                 Margin="0,0,12,0">
-                      <Grid Width="16" Height="16" Margin="0,0,5,0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding StateGlyph}" FontSize="10" Foreground="#0078D4"
+                      <Grid Width="20" Height="20" Margin="0,0,5,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StateGlyph}" FontSize="10" Foreground="{Binding StateBrush}"
                                    VerticalAlignment="Center">
                           <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -93,7 +90,7 @@
                         </controls:ProgressRing>
                       </Grid>
                       <TextBlock Text="{Binding StateText}" FontSize="10" FontWeight="SemiBold"
-                                 Foreground="#1F1F1F" VerticalAlignment="Center"/>
+                                 Foreground="{Binding StateBrush}" VerticalAlignment="Center"/>
                       <TextBlock Text="{Binding RestartCountText}" FontSize="9" Foreground="#605E5C"
                                  Margin="10,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -133,7 +130,7 @@
     </Grid>
 
     <Grid x:Name="AddProgramOverlay" Panel.ZIndex="10" Visibility="Collapsed"
-          Background="#66000000" Opacity="0" MouseDown="AddProgramOverlay_MouseDown">
+          Background="#66000000" Opacity="0">
       <Border x:Name="PopupCard" Width="560" MaxHeight="600" Background="White"
               BorderBrush="#8A8886" BorderThickness="1" HorizontalAlignment="Center"
               VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Opacity="0">

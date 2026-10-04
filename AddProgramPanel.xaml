@@ -17,6 +17,35 @@
       <Setter Property="Padding" Value="10,8"/>
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="MinHeight" Value="36"/>
+      <Setter Property="CaretBrush" Value="#0078D4"/>
+      <Setter Property="SelectionBrush" Value="#0078D4"/>
+      <Setter Property="SelectionTextBrush" Value="White"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Grid>
+              <Border x:Name="FieldBorder" Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"/>
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                            Focusable="False" VerticalAlignment="Center"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="FieldBorder" Property="BorderBrush" Value="#323130"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="FieldBorder" Property="BorderBrush" Value="#0078D4"/>
+                <Setter TargetName="FieldBorder" Property="BorderThickness" Value="2"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="FieldBorder" Property="Background" Value="#F3F3F3"/>
+                <Setter TargetName="FieldBorder" Property="BorderBrush" Value="#D1D1D1"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
   </UserControl.Resources>
   <Grid Background="White" Margin="24,20,24,18">
@@ -31,8 +60,6 @@
     </Grid.RowDefinitions>
 
     <DockPanel LastChildFill="False" Margin="0,0,0,18">
-      <Button DockPanel.Dock="Right" Content="×" Style="{StaticResource QuietButton}"
-              Padding="8,2" FontSize="17" Click="Cancel_Click"/>
       <StackPanel>
         <TextBlock Text="添加到守护列表" FontSize="20" FontWeight="SemiBold" Foreground="#1F1F1F"/>
         <TextBlock Text="程序退出或崩溃后，守护器会自动恢复。"
@@ -86,10 +113,10 @@
     </StackPanel>
 
     <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button Content="取消" Style="{StaticResource QuietButton}" Padding="16,8"
-              Margin="0,0,8,0" Click="Cancel_Click"/>
       <Button x:Name="AddButton" Content="添加程序" Style="{StaticResource PrimaryButton}"
-              MinWidth="120" Padding="16,8" Click="Add_Click" IsDefault="True"/>
+              MinWidth="120" Padding="16,8" Margin="0,0,8,0" Click="Add_Click" IsDefault="True"/>
+      <Button Content="取消" Style="{StaticResource QuietButton}" MinWidth="120" Padding="16,8"
+              Click="Cancel_Click"/>
     </StackPanel>
   </Grid>
 </UserControl>

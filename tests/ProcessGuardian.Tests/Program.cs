@@ -28,7 +28,8 @@ try
     await runner.RunAsync("disposing supervisor leaves process running", () => DisposeLeavesProcessAsync(root));
     await runner.RunAsync("attached running process is left alive when monitoring pauses", () => AttachExistingAsync(root));
     await runner.RunAsync("local control pipe adds lists and minimizes", () => ControlPipeAsync(root));
-    await runner.RunAsync("main UI is a single add-and-manage screen", () => SinglePageUiAsync(root));
+    await runner.RunAsync("program icons load, cache and fall back safely", () => ProgramIconCacheAsync(root));
+    await runner.RunAsync("main UI follows the Windows modal-dialog pattern", () => SinglePageUiAsync(root));
     Console.WriteLine($"Tests: {runner.Passed} passed, {runner.Failed} failed");
 }
 finally
@@ -243,13 +244,17 @@ static Task SinglePageUiAsync(string root)
         && addPanelMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
         "the embedded add panel is missing its attach-existing option or submit action");
     var mainCode = File.ReadAllText(Path.Combine(projectRoot, "MainWindow.xaml.cs"));
-    Check(mainCode.Contains("CreateAnimation(0, 1", StringComparison.Ordinal)
-        && mainCode.Contains("EasingMode.EaseOut", StringComparison.Ordinal)
-        && mainCode.Contains("CreateAnimation(12, 0, 220", StringComparison.Ordinal)
+    Check(mainCode.Contains("CreateAnimation(0, 1, 83", StringComparison.Ordinal)
+        && mainCode.Contains("CreateMotionAnimation(12, 0, 167", StringComparison.Ordinal)
+        && mainCode.Contains("SystemParameters.ClientAreaAnimation", StringComparison.Ordinal)
         && mainCode.Contains("Key.Escape", StringComparison.Ordinal)
         && !mainCode.Contains("ShowDialog", StringComparison.Ordinal)
-        && mainMarkup.Contains("AddProgramOverlay_MouseDown", StringComparison.Ordinal),
+        && !mainMarkup.Contains("MouseDown=", StringComparison.Ordinal),
         "the embedded panel is missing its entrance animation or Escape dismissal");
+    var motionCode = File.ReadAllText(Path.Combine(projectRoot, "Controls", "WindowsFastEase.cs"));
+    Check(motionCode.Contains("cubic-bezier(0, 0, 0, 1)", StringComparison.Ordinal)
+        && motionCode.Contains("Math.Pow(normalizedTime, 1d / 3d)", StringComparison.Ordinal),
+        "the modal transition does not use the Windows fast-in easing curve");
     var themeMarkup = XDocument.Load(Path.Combine(projectRoot, "App.xaml")).ToString(SaveOptions.DisableFormatting);
     Check(themeMarkup.Contains("Accent\" Color=\"#0078D4", StringComparison.Ordinal)
         && themeMarkup.Contains("#E5F1FB", StringComparison.Ordinal),
@@ -257,6 +262,9 @@ static Task SinglePageUiAsync(string root)
     Check(mainMarkup.Contains("controls:ProgressRing", StringComparison.Ordinal)
         && mainMarkup.Contains("{Binding IsLoading}", StringComparison.Ordinal),
         "loading states are not using the shared progress ring");
+    Check(mainMarkup.Contains("{Binding ProgramIcon}", StringComparison.Ordinal)
+        && mainMarkup.Contains("{Binding StateBrush}", StringComparison.Ordinal),
+        "list rows are missing native program icons or state colors");
     var ringMarkup = XDocument.Load(Path.Combine(projectRoot, "Controls", "ProgressRing.xaml"))
         .ToString(SaveOptions.DisableFormatting);
     Check(ringMarkup.Contains("DoubleAnimation", StringComparison.Ordinal)
@@ -268,6 +276,22 @@ static Task SinglePageUiAsync(string root)
         "dashboard or activity panels remain in the main window");
     Check(!File.Exists(Path.Combine(projectRoot, "ProgramEditorWindow.xaml")),
         "the separate program-editor screen was not removed");
+    return Task.CompletedTask;
+}
+
+static Task ProgramIconCacheAsync(string root)
+{
+    var executablePath = Environment.ProcessPath
+        ?? throw new InvalidOperationException("test executable path is unavailable");
+    var icon = ExecutableIconProvider.Get(executablePath);
+    Check(icon.IsFrozen, "executable icon should be frozen for safe WPF binding");
+    Check(ReferenceEquals(icon, ExecutableIconProvider.Get(executablePath)),
+        "executable icon was not cached");
+
+    var missingPath = Path.Combine(root, "missing-icon.exe");
+    var fallbackIcon = ExecutableIconProvider.Get(missingPath);
+    Check(fallbackIcon.IsFrozen && ReferenceEquals(fallbackIcon, ExecutableIconProvider.Get(missingPath)),
+        "missing executable path did not return a cached fallback icon");
     return Task.CompletedTask;
 }
 

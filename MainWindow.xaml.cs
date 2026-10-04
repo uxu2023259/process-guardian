@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using ProcessGuardian.Controls;
 using ProcessGuardian.Models;
 using ProcessGuardian.ViewModels;
 
@@ -52,15 +53,24 @@ public partial class MainWindow : Window
         AddProgramOverlay.Opacity = 0;
         PopupCard.Opacity = 0;
         var transform = (TranslateTransform)PopupCard.RenderTransform;
-        transform.Y = 12;
+        transform.Y = SystemParameters.ClientAreaAnimation ? 12 : 0;
+
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            AddProgramOverlay.Opacity = 1;
+            PopupCard.Opacity = 1;
+            AddPanel.FocusName();
+            _transitionRunning = false;
+            return;
+        }
 
         AddProgramOverlay.BeginAnimation(UIElement.OpacityProperty,
-            CreateAnimation(0, 1, 190, EasingMode.EaseOut));
+            CreateAnimation(0, 1, 83));
         PopupCard.BeginAnimation(UIElement.OpacityProperty,
-            CreateAnimation(0, 1, 190, EasingMode.EaseOut));
+            CreateAnimation(0, 1, 83));
         transform.BeginAnimation(TranslateTransform.YProperty,
-            CreateAnimation(12, 0, 220, EasingMode.EaseOut));
-        await Task.Delay(230);
+            CreateMotionAnimation(12, 0, 167));
+        await Task.Delay(170);
         AddPanel.FocusName();
         _transitionRunning = false;
     }
@@ -90,12 +100,6 @@ public partial class MainWindow : Window
 
     private async void AddPanel_CancelRequested() => await HideAddPanelAsync();
 
-    private async void AddProgramOverlay_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (ReferenceEquals(e.OriginalSource, AddProgramOverlay))
-            await HideAddPanelAsync();
-    }
-
     private async void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != Key.Escape || !_addPanelOpen) return;
@@ -109,13 +113,16 @@ public partial class MainWindow : Window
 
         _transitionRunning = true;
         var transform = (TranslateTransform)PopupCard.RenderTransform;
-        AddProgramOverlay.BeginAnimation(UIElement.OpacityProperty,
-            CreateAnimation(AddProgramOverlay.Opacity, 0, 140, EasingMode.EaseIn));
-        PopupCard.BeginAnimation(UIElement.OpacityProperty,
-            CreateAnimation(PopupCard.Opacity, 0, 150, EasingMode.EaseIn));
-        transform.BeginAnimation(TranslateTransform.YProperty,
-            CreateAnimation(transform.Y, 8, 150, EasingMode.EaseIn));
-        await Task.Delay(160);
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            AddProgramOverlay.BeginAnimation(UIElement.OpacityProperty,
+                CreateAnimation(AddProgramOverlay.Opacity, 0, 83));
+            PopupCard.BeginAnimation(UIElement.OpacityProperty,
+                CreateAnimation(PopupCard.Opacity, 0, 167));
+            transform.BeginAnimation(TranslateTransform.YProperty,
+                CreateMotionAnimation(transform.Y, 8, 167));
+            await Task.Delay(170);
+        }
 
         AddProgramOverlay.BeginAnimation(UIElement.OpacityProperty, null);
         PopupCard.BeginAnimation(UIElement.OpacityProperty, null);
@@ -130,9 +137,12 @@ public partial class MainWindow : Window
         _transitionRunning = false;
     }
 
-    private static DoubleAnimation CreateAnimation(double from, double to, int durationMs, EasingMode easingMode) =>
+    private static DoubleAnimation CreateAnimation(double from, double to, int durationMs) =>
+        new(from, to, TimeSpan.FromMilliseconds(durationMs));
+
+    private static DoubleAnimation CreateMotionAnimation(double from, double to, int durationMs) =>
         new(from, to, TimeSpan.FromMilliseconds(durationMs))
         {
-            EasingFunction = new CubicEase { EasingMode = easingMode }
+            EasingFunction = new WindowsFastEase { EasingMode = EasingMode.EaseIn }
         };
 }
