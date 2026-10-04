@@ -213,6 +213,11 @@ static Task SinglePageUiAsync(string root)
     var projectRoot = Path.GetFullPath(Path.Combine(root, "..", ".."));
     var document = XDocument.Load(Path.Combine(projectRoot, "MainWindow.xaml"));
     var markup = document.ToString(SaveOptions.DisableFormatting);
+    var window = document.Root ?? throw new InvalidOperationException("main window markup has no root element");
+    Check(double.Parse((string?)window.Attribute("Width") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 850,
+        "main window is wider than the compact layout limit");
+    Check(double.Parse((string?)window.Attribute("Height") ?? "0", System.Globalization.CultureInfo.InvariantCulture) <= 720,
+        "main window is taller than the compact layout limit");
     Check(markup.Contains("Text=\"添加程序\"", StringComparison.Ordinal), "single page is missing its add-program heading");
     Check(markup.Contains("守护列表", StringComparison.Ordinal), "single page is missing the in-place target list");
     Check(markup.Contains("AttachExistingBox", StringComparison.Ordinal), "single page is missing process attachment option");
