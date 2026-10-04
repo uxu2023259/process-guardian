@@ -45,7 +45,7 @@ public partial class App : System.Windows.Application
 
             _supervisor = new ProcessSupervisor(settings, store, _logger);
             _supervisor.NotificationRequested += OnNotificationRequested;
-            _viewModel = new MainViewModel(_supervisor, settings, store, startup, _logger, Dispatcher);
+            _viewModel = new MainViewModel(_supervisor, settings, store, startup, Dispatcher);
             _mainWindow = new MainWindow(_viewModel);
             _mainWindow.Closing += OnMainWindowClosing;
             SetupTrayIcon();

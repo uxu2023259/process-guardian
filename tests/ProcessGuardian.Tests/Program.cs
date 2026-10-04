@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Xml.Linq;
 using ProcessGuardian.Models;
 using ProcessGuardian.Services;
 
@@ -27,6 +28,7 @@ try
     await runner.RunAsync("disposing supervisor leaves process running", () => DisposeLeavesProcessAsync(root));
     await runner.RunAsync("attached running process is left alive when monitoring pauses", () => AttachExistingAsync(root));
     await runner.RunAsync("local control pipe adds lists and minimizes", () => ControlPipeAsync(root));
+    await runner.RunAsync("main UI is a single add-and-manage screen", () => SinglePageUiAsync(root));
     Console.WriteLine($"Tests: {runner.Passed} passed, {runner.Failed} failed");
 }
 finally
@@ -204,6 +206,21 @@ static async Task ControlPipeAsync(string root)
         await supervisor.SetEnabledAsync(definition.Id, false);
     }
     finally { await supervisor.DisposeAsync(); }
+}
+
+static Task SinglePageUiAsync(string root)
+{
+    var projectRoot = Path.GetFullPath(Path.Combine(root, "..", ".."));
+    var document = XDocument.Load(Path.Combine(projectRoot, "MainWindow.xaml"));
+    var markup = document.ToString(SaveOptions.DisableFormatting);
+    Check(markup.Contains("Text=\"添加程序\"", StringComparison.Ordinal), "single page is missing its add-program heading");
+    Check(markup.Contains("守护列表", StringComparison.Ordinal), "single page is missing the in-place target list");
+    Check(markup.Contains("AttachExistingBox", StringComparison.Ordinal), "single page is missing process attachment option");
+    Check(!markup.Contains("系统总览", StringComparison.Ordinal) && !markup.Contains("实时活动", StringComparison.Ordinal),
+        "dashboard or activity panels remain in the main window");
+    Check(!File.Exists(Path.Combine(projectRoot, "ProgramEditorWindow.xaml")),
+        "the separate program-editor screen was not removed");
+    return Task.CompletedTask;
 }
 
 static ProcessSupervisorOptions Options(int failureLimit, int retryMs, int stableMs) => new()
