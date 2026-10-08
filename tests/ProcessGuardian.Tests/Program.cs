@@ -44,11 +44,18 @@ static async Task SettingsRoundTripAsync(string root)
 {
     var path = TestPath(root, "settings-roundtrip", "settings.json");
     var store = new JsonSettingsStore(path);
-    var original = new AppSettings { StartWithWindows = false };
+    var original = new AppSettings
+    {
+        StartWithWindows = false,
+        KeepAwakeEnabled = true,
+        ScreenSaverWasActive = true
+    };
     original.Programs.Add(new ProgramDefinition { Name = "worker", ExecutablePath = "worker.exe", Arguments = "--quiet", AttachExisting = true });
     await store.SaveAsync(original);
     var actual = await store.LoadAsync();
     Check(!actual.StartWithWindows && actual.Programs.Count == 1, "settings fields were not preserved");
+    Check(actual.KeepAwakeEnabled && actual.ScreenSaverWasActive == true,
+        "keep-awake preference or screen-saver restore state was not preserved");
     Check(actual.Programs[0].Arguments == "--quiet" && actual.SchemaVersion == 1, "program data was not normalized");
     Check(actual.Programs[0].AttachExisting, "attach-existing preference was not preserved");
 }
@@ -221,6 +228,9 @@ static Task SinglePageUiAsync(string root)
         "main window is taller than the compact layout limit");
     Check(mainMarkup.Contains("受保护的程序", StringComparison.Ordinal), "main screen is missing the protected-program heading");
     Check(mainMarkup.Contains("Click=\"AddProgram_Click\"", StringComparison.Ordinal), "main screen is missing its add button");
+    Check(mainMarkup.Contains("KeepAwakeEnabled", StringComparison.Ordinal)
+        && mainMarkup.Contains("防睡眠与自动锁定", StringComparison.Ordinal),
+        "main screen is missing the keep-awake control");
     Check(mainMarkup.Contains("WindowStyle=\"SingleBorderWindow\"", StringComparison.Ordinal),
         "main screen is not using the native Windows title bar");
     Check(mainMarkup.Contains("DockPanel LastChildFill=\"False\"", StringComparison.Ordinal),

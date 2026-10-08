@@ -18,6 +18,8 @@ public partial class App : System.Windows.Application
     private AppLogger? _logger;
     private MainWindow? _mainWindow;
     private MainViewModel? _viewModel;
+    private AppSettings? _settings;
+    private KeepAwakeService? _keepAwakeService;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -35,7 +37,27 @@ public partial class App : System.Windows.Application
         {
             var store = new JsonSettingsStore();
             var settings = await store.LoadAsync();
+            _settings = settings;
             _logger = new AppLogger();
+            _keepAwakeService = new KeepAwakeService();
+            try
+            {
+                if (settings.KeepAwakeEnabled)
+                    _keepAwakeService.Enable(settings);
+                else if (settings.ScreenSaverWasActive.HasValue)
+                    _keepAwakeService.Disable(settings);
+            }
+            catch (Exception exception)
+            {
+                settings.KeepAwakeEnabled = false;
+                await _logger.WriteAsync(LogSeverity.Error, "系统", $"应用保持唤醒设置失败：{exception.Message}");
+            }
+            try { await store.SaveAsync(settings); }
+            catch (Exception exception)
+            {
+                await _logger.WriteAsync(LogSeverity.Warning, "系统", $"保存保持唤醒设置失败：{exception.Message}");
+            }
+
             var startup = new StartupRegistration();
             try { startup.Apply(settings.StartWithWindows); }
             catch (Exception exception)
@@ -45,7 +67,7 @@ public partial class App : System.Windows.Application
 
             _supervisor = new ProcessSupervisor(settings, store, _logger);
             _supervisor.NotificationRequested += OnNotificationRequested;
-            _viewModel = new MainViewModel(_supervisor, settings, store, startup, Dispatcher);
+            _viewModel = new MainViewModel(_supervisor, settings, store, startup, _keepAwakeService, Dispatcher);
             _mainWindow = new MainWindow(_viewModel);
             _mainWindow.Closing += OnMainWindowClosing;
             SetupTrayIcon();
@@ -169,6 +191,15 @@ public partial class App : System.Windows.Application
         {
             try { _supervisor.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
             catch { }
+        }
+        if (_keepAwakeService is not null && _settings is not null)
+        {
+            try { _keepAwakeService.Disable(_settings, clearRestoreState: false); }
+            catch (Exception exception)
+            {
+                try { _logger?.WriteAsync(LogSeverity.Warning, "系统", $"退出时恢复电源设置失败：{exception.Message}").GetAwaiter().GetResult(); }
+                catch { }
+            }
         }
         if (_ownsMutex) _instanceMutex?.ReleaseMutex();
         _instanceMutex?.Dispose();

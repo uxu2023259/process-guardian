@@ -4,6 +4,8 @@ public sealed class AppSettings
 {
     public int SchemaVersion { get; set; } = 1;
     public bool StartWithWindows { get; set; } = true;
+    public bool KeepAwakeEnabled { get; set; }
+    public bool? ScreenSaverWasActive { get; set; }
     public List<ProgramDefinition> Programs { get; set; } = [];
 }
 

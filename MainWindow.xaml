@@ -12,6 +12,7 @@
     <Grid Margin="24,20,24,20">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
@@ -26,7 +27,29 @@
                 Click="AddProgram_Click" IsDefault="True"/>
       </DockPanel>
 
-      <Grid Grid.Row="1">
+      <Border Grid.Row="1" Background="White" BorderBrush="#D1D1D1" BorderThickness="1"
+              Padding="12,9" Margin="0,0,0,12">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <CheckBox IsChecked="{Binding KeepAwakeEnabled, Mode=TwoWay}" VerticalAlignment="Center"
+                    Margin="0,0,12,0" FontSize="12" FontWeight="SemiBold" Foreground="#1F1F1F">
+            <TextBlock Text="防睡眠与自动锁定"/>
+          </CheckBox>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock Text="保持系统和屏幕唤醒，暂停屏幕保护程序自动锁定，减少锁屏后待机断网。"
+                       FontSize="10" Foreground="#1F1F1F" TextWrapping="Wrap"/>
+            <TextBlock Text="手动锁屏或组织策略仍可锁定；持续亮屏会增加耗电。" FontSize="9"
+                       Foreground="#605E5C" Margin="0,3,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding KeepAwakeStatus}" FontSize="9" Foreground="#605E5C"
+                       Margin="0,3,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="2">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <ScrollViewer.Style>
             <Style TargetType="ScrollViewer">
