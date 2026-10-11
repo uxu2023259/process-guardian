@@ -11,9 +11,9 @@
     <ApplicationIcon>Assets\process-guardian.ico</ApplicationIcon>
     <AssemblyName>ProcessGuardian</AssemblyName>
     <RootNamespace>ProcessGuardian</RootNamespace>
-    <Version>0.1.39</Version>
-    <FileVersion>0.1.39.0</FileVersion>
-    <InformationalVersion>0.1.39</InformationalVersion>
+    <Version>0.1.40</Version>
+    <FileVersion>0.1.40.0</FileVersion>
+    <InformationalVersion>0.1.40</InformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>

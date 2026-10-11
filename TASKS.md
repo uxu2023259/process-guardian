@@ -1,6 +1,6 @@
 # Tasks
 
-- [x] Remove the opaque background and redraw the centered shield and check.
-- [x] Regenerate transparent PNG and multi-size ICO assets.
-- [x] Build, run existing checks, and refresh the `PLUGIN` executable.
+- [x] Scale the transparent shield icon to occupy nearly the full canvas.
+- [x] Regenerate the multi-size ICO and PNG assets.
+- [x] Run existing checks, refresh the `PLUGIN` executable, and verify the output.
 - [x] Review and commit the changes.

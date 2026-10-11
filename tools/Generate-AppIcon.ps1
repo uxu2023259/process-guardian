@@ -12,7 +12,16 @@ foreach ($size in $sizes) {
     $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $graphics.ScaleTransform($size / 256.0, $size / 256.0)
+    $baseScale = $size / 256.0
+    $iconScale = 1.14
+    $combinedScale = $baseScale * $iconScale
+    $offsetX = -17.92 * $baseScale
+    $offsetY = -18.34 * $baseScale
+    $transform = [Drawing.Drawing2D.Matrix]::new(
+        [single]$combinedScale, [single]0, [single]0, [single]$combinedScale,
+        [single]$offsetX, [single]$offsetY)
+    $graphics.Transform = $transform
+    $transform.Dispose()
 
     $shield = [Drawing.Drawing2D.GraphicsPath]::new()
     $shield.AddBezier([Drawing.PointF]::new(128, 26), [Drawing.PointF]::new(156, 36), [Drawing.PointF]::new(185, 46), [Drawing.PointF]::new(211, 55))
