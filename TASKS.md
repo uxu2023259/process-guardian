@@ -1,6 +1,6 @@
 # Tasks
 
-- [x] Design a compact shield-and-check icon in multiple Windows icon sizes.
-- [x] Apply the icon to the executable, main window, and system tray.
+- [x] Remove the opaque background and redraw the centered shield and check.
+- [x] Regenerate transparent PNG and multi-size ICO assets.
 - [x] Build, run existing checks, and refresh the `PLUGIN` executable.
 - [x] Review and commit the changes.

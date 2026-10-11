@@ -14,50 +14,41 @@ foreach ($size in $sizes) {
     $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $graphics.ScaleTransform($size / 256.0, $size / 256.0)
 
-    $tile = [Drawing.Drawing2D.GraphicsPath]::new()
-    $tile.AddArc(8, 8, 76, 76, 180, 90)
-    $tile.AddArc(172, 8, 76, 76, 270, 90)
-    $tile.AddArc(172, 172, 76, 76, 0, 90)
-    $tile.AddArc(8, 172, 76, 76, 90, 90)
-    $tile.CloseFigure()
-    $background = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(19, 34, 54))
-    $graphics.FillPath($background, $tile)
-
     $shield = [Drawing.Drawing2D.GraphicsPath]::new()
-    $shieldPoints = [Drawing.PointF[]]@(
-        [Drawing.PointF]::new(128, 38), [Drawing.PointF]::new(198, 62),
-        [Drawing.PointF]::new(194, 128), [Drawing.PointF]::new(181, 160),
-        [Drawing.PointF]::new(156, 184), [Drawing.PointF]::new(128, 202),
-        [Drawing.PointF]::new(100, 184), [Drawing.PointF]::new(75, 160),
-        [Drawing.PointF]::new(62, 128), [Drawing.PointF]::new(58, 62)
-    )
-    $shield.AddPolygon($shieldPoints)
+    $shield.AddBezier([Drawing.PointF]::new(128, 26), [Drawing.PointF]::new(156, 36), [Drawing.PointF]::new(185, 46), [Drawing.PointF]::new(211, 55))
+    $shield.AddLine([Drawing.PointF]::new(211, 55), [Drawing.PointF]::new(207, 132))
+    $shield.AddBezier([Drawing.PointF]::new(207, 132), [Drawing.PointF]::new(204, 179), [Drawing.PointF]::new(169, 215), [Drawing.PointF]::new(128, 236))
+    $shield.AddBezier([Drawing.PointF]::new(128, 236), [Drawing.PointF]::new(87, 215), [Drawing.PointF]::new(52, 179), [Drawing.PointF]::new(49, 132))
+    $shield.AddLine([Drawing.PointF]::new(49, 132), [Drawing.PointF]::new(45, 55))
+    $shield.AddBezier([Drawing.PointF]::new(45, 55), [Drawing.PointF]::new(71, 46), [Drawing.PointF]::new(100, 36), [Drawing.PointF]::new(128, 26))
+    $shield.CloseFigure()
     $shieldBrush = [Drawing.Drawing2D.LinearGradientBrush]::new(
-        [Drawing.PointF]::new(128, 38), [Drawing.PointF]::new(128, 202),
-        [Drawing.Color]::FromArgb(70, 226, 206), [Drawing.Color]::FromArgb(30, 180, 196))
+        [Drawing.PointF]::new(128, 26), [Drawing.PointF]::new(128, 236),
+        [Drawing.Color]::FromArgb(58, 220, 198), [Drawing.Color]::FromArgb(26, 174, 190))
     $graphics.FillPath($shieldBrush, $shield)
+    $outlinePen = [Drawing.Pen]::new([Drawing.Color]::FromArgb(19, 44, 62), 4)
+    $outlinePen.LineJoin = [Drawing.Drawing2D.LineJoin]::Round
+    $graphics.DrawPath($outlinePen, $shield)
 
     $check = [Drawing.Drawing2D.GraphicsPath]::new()
-    $checkPoints = [Drawing.PointF[]]@(
-        [Drawing.PointF]::new(91, 121), [Drawing.PointF]::new(108, 138),
-        [Drawing.PointF]::new(158, 88), [Drawing.PointF]::new(175, 105),
-        [Drawing.PointF]::new(108, 172), [Drawing.PointF]::new(74, 138)
-    )
-    $check.AddPolygon($checkPoints)
-    $checkBrush = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(19, 44, 62))
-    $graphics.FillPath($checkBrush, $check)
+    $check.AddLine([Drawing.PointF]::new(86, 128), [Drawing.PointF]::new(113, 155))
+    $check.AddLine([Drawing.PointF]::new(113, 155), [Drawing.PointF]::new(171, 97))
+    $checkPen = [Drawing.Pen]::new([Drawing.Color]::FromArgb(19, 44, 62), 17)
+    $checkPen.StartCap = [Drawing.Drawing2D.LineCap]::Round
+    $checkPen.EndCap = [Drawing.Drawing2D.LineCap]::Round
+    $checkPen.LineJoin = [Drawing.Drawing2D.LineJoin]::Round
+    $graphics.DrawPath($checkPen, $check)
 
     $pngStream = [IO.MemoryStream]::new()
     $bitmap.Save($pngStream, [Drawing.Imaging.ImageFormat]::Png)
     $frames.Add($pngStream.ToArray())
 
     $pngStream.Dispose()
-    $checkBrush.Dispose()
+    $checkPen.Dispose()
     $check.Dispose()
+    $outlinePen.Dispose()
     $shieldBrush.Dispose()
     $shield.Dispose()
-    $background.Dispose()
-    $tile.Dispose()
     $graphics.Dispose()
 
     if ($size -eq 256) {
