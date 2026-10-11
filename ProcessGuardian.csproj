@@ -8,11 +8,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\process-guardian.ico</ApplicationIcon>
     <AssemblyName>ProcessGuardian</AssemblyName>
     <RootNamespace>ProcessGuardian</RootNamespace>
-    <Version>0.1.37</Version>
-    <FileVersion>0.1.37.0</FileVersion>
-    <InformationalVersion>0.1.37</InformationalVersion>
+    <Version>0.1.38</Version>
+    <FileVersion>0.1.38.0</FileVersion>
+    <InformationalVersion>0.1.38</InformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
@@ -21,6 +22,7 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\process-guardian.ico" />
     <Compile Remove="tests/**/*.cs" />
     <Compile Remove="tools/**/*.cs" />
   </ItemGroup>

@@ -4,6 +4,7 @@
         xmlns:controls="clr-namespace:ProcessGuardian.Controls"
         xmlns:ui="clr-namespace:ProcessGuardian"
         Title="进程守护器" Width="820" Height="690" MinWidth="760" MinHeight="560"
+        Icon="Assets/process-guardian.ico"
         WindowStartupLocation="CenterScreen" Background="#F3F3F3"
         FontFamily="Segoe UI, Microsoft YaHei UI" WindowStyle="SingleBorderWindow"
         ResizeMode="CanResizeWithGrip" UseLayoutRounding="True" SnapsToDevicePixels="True"

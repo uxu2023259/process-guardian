@@ -13,6 +13,7 @@ public partial class App : System.Windows.Application
     private bool _ownsMutex;
     private bool _exitRequested;
     private Forms.NotifyIcon? _trayIcon;
+    private System.Drawing.Icon? _applicationIcon;
     private ProcessSupervisor? _supervisor;
     private ProcessGuardianControlServer? _controlServer;
     private AppLogger? _logger;
@@ -136,9 +137,12 @@ public partial class App : System.Windows.Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出守护器", null, (_, _) => Dispatcher.BeginInvoke(new Action(ExitApplication)));
 
+        var executablePath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(executablePath))
+            _applicationIcon = System.Drawing.Icon.ExtractAssociatedIcon(executablePath);
         _trayIcon = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = _applicationIcon ?? System.Drawing.SystemIcons.Application,
             Text = "进程守护器 · 后台监控中",
             ContextMenuStrip = menu,
             Visible = true
@@ -217,6 +221,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        _applicationIcon?.Dispose();
         if (_keepAwakeService is not null && _settings is not null)
         {
             try { _keepAwakeService.Disable(_settings, clearRestoreState: false); }
