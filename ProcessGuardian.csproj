@@ -10,9 +10,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ProcessGuardian</AssemblyName>
     <RootNamespace>ProcessGuardian</RootNamespace>
-    <Version>0.1.36</Version>
-    <FileVersion>0.1.36.0</FileVersion>
-    <InformationalVersion>0.1.36</InformationalVersion>
+    <Version>0.1.37</Version>
+    <FileVersion>0.1.37.0</FileVersion>
+    <InformationalVersion>0.1.37</InformationalVersion>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <!-- WPF uses PerMonitorV2 from app.manifest; WinForms is limited to tray and folder-picker APIs. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>

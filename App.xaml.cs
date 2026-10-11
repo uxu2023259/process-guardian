@@ -83,6 +83,7 @@ public partial class App : System.Windows.Application
         {
             System.Windows.MessageBox.Show($"进程守护器启动失败：{exception.Message}", "启动失败",
                 System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            await DisposeServicesAsync();
             Shutdown();
         }
     }
@@ -133,7 +134,7 @@ public partial class App : System.Windows.Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开进程守护器", null, (_, _) => Dispatcher.Invoke(ShowMainWindow));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出守护器", null, (_, _) => Dispatcher.Invoke(ExitApplication));
+        menu.Items.Add("退出守护器", null, (_, _) => Dispatcher.BeginInvoke(new Action(ExitApplication)));
 
         _trayIcon = new Forms.NotifyIcon
         {
@@ -172,26 +173,50 @@ public partial class App : System.Windows.Application
         _mainWindow.Activate();
     }
 
-    private void ExitApplication()
+    private async void ExitApplication()
     {
+        if (_exitRequested) return;
         _exitRequested = true;
         _mainWindow?.Close();
+        await DisposeServicesAsync();
         Shutdown();
+    }
+
+    private async Task DisposeServicesAsync()
+    {
+        if (_controlServer is not null)
+        {
+            try { await _controlServer.DisposeAsync(); }
+            catch (Exception exception)
+            {
+                try
+                {
+                    if (_logger is not null)
+                        await _logger.WriteAsync(LogSeverity.Warning, "系统", $"关闭控制通道失败：{exception.Message}");
+                }
+                catch { }
+            }
+            _controlServer = null;
+        }
+        if (_supervisor is not null)
+        {
+            try { await _supervisor.DisposeAsync(); }
+            catch (Exception exception)
+            {
+                try
+                {
+                    if (_logger is not null)
+                        await _logger.WriteAsync(LogSeverity.Warning, "系统", $"关闭进程监控失败：{exception.Message}");
+                }
+                catch { }
+            }
+            _supervisor = null;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_controlServer is not null)
-        {
-            try { _controlServer.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-            catch { }
-        }
         _trayIcon?.Dispose();
-        if (_supervisor is not null)
-        {
-            try { _supervisor.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-            catch { }
-        }
         if (_keepAwakeService is not null && _settings is not null)
         {
             try { _keepAwakeService.Disable(_settings, clearRestoreState: false); }

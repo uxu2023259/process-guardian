@@ -1,5 +1,8 @@
 # Tasks
 
-- [x] Diagnose the .NET host path and stale ChatGPT executable configuration.
-- [x] Add a persistent keep-awake option that prevents idle sleep and screensaver lock, and restores prior settings when disabled or the app exits.
-- [x] Build and run the available project checks; verify the published app in `PLUGIN`.
+- [x] Persist settings and process definitions in the user data directory.
+- [x] Register the single-file executable for Windows sign-in startup.
+- [x] Make tray exit dispose asynchronous services without blocking the UI thread.
+- [x] Publish and verify the single-file executable in `PLUGIN`.
+- [x] Run the existing project checks.
+- [ ] Review and commit the changes.
