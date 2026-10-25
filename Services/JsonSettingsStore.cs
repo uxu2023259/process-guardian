@@ -71,6 +71,10 @@ public sealed class JsonSettingsStore
             program.ExecutablePath ??= "";
             program.Arguments ??= "";
             program.WorkingDirectory ??= "";
+            program.PackageFamilyName ??= "";
+            program.PackageArchitecture ??= "";
+            program.PackageRelativeExecutablePath ??= "";
+            program.PackageRelativeWorkingDirectory ??= "";
         }
         return settings;
     }

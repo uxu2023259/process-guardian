@@ -10,6 +10,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private readonly ProcessSupervisorOptions _options;
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppLogger _logger;
+    private readonly WindowsPackageResolver _packageResolver;
     private readonly object _sync = new();
     private readonly Dictionary<Guid, TargetRuntime> _targets = [];
     private readonly Channel<bool> _wake = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
@@ -25,11 +26,12 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     private bool _disposed;
 
     public ProcessSupervisor(AppSettings settings, JsonSettingsStore settingsStore, AppLogger logger,
-        ProcessSupervisorOptions? options = null)
+        ProcessSupervisorOptions? options = null, WindowsPackageResolver? packageResolver = null)
     {
         _settings = settings;
         _settingsStore = settingsStore;
         _logger = logger;
+        _packageResolver = packageResolver ?? new WindowsPackageResolver();
         _options = options ?? ProcessSupervisorOptions.Default;
         _options.Validate();
         foreach (var definition in settings.Programs)
@@ -242,13 +244,16 @@ public sealed class ProcessSupervisor : IAsyncDisposable
     {
         if (!runtime.Definition.Enabled || runtime.Process is not null) return;
         Publish(runtime, ProgramState.Starting, "正在启动");
-        var executable = Environment.ExpandEnvironmentVariables(runtime.Definition.ExecutablePath.Trim());
-        var workingDirectory = Environment.ExpandEnvironmentVariables(runtime.Definition.WorkingDirectory.Trim());
-        if (string.IsNullOrWhiteSpace(workingDirectory)) workingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory;
-
         try
         {
-            if (runtime.Definition.AttachExisting && TryAttachExisting(executable, out var existing))
+            var target = _packageResolver.Resolve(runtime.Definition);
+            if (target.DefinitionChanged) await SaveProgramsAsync(cancellationToken);
+            if (!target.IsResolved)
+                throw new FileNotFoundException(target.Error ?? "找不到应用包中的可执行文件。");
+
+            var executable = target.ExecutablePath;
+            var workingDirectory = target.WorkingDirectory;
+            if (runtime.Definition.AttachExisting && TryAttachExisting(executable, runtime.Definition, out var existing))
             {
                 TrackProcess(runtime, existing, isAttached: true);
                 Publish(runtime, ProgramState.Running, $"已接管现有程序 · PID {existing.Id}");
@@ -389,7 +394,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         runtime.IsAttached = isAttached;
     }
 
-    private static bool TryAttachExisting(string executable, out Process process)
+    private bool TryAttachExisting(string executable, ProgramDefinition definition, out Process process)
     {
         process = null!;
         if (!File.Exists(executable)) return false;
@@ -401,8 +406,10 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             try
             {
                 var candidatePath = candidate.MainModule?.FileName;
-                if (candidatePath is not null && string.Equals(Path.GetFullPath(candidatePath), expectedPath,
-                        StringComparison.OrdinalIgnoreCase) && !candidate.HasExited)
+                var samePath = candidatePath is not null && string.Equals(Path.GetFullPath(candidatePath),
+                    expectedPath, StringComparison.OrdinalIgnoreCase);
+                var samePackage = candidatePath is not null && _packageResolver.IsFromSamePackage(candidatePath, definition);
+                if ((samePath || samePackage) && !candidate.HasExited)
                     candidates.Add(candidate);
                 else
                     candidate.Dispose();

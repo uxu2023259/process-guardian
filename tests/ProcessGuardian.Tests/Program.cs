@@ -19,6 +19,7 @@ Directory.CreateDirectory(root);
 try
 {
     await runner.RunAsync("settings round trip and normalization", () => SettingsRoundTripAsync(root));
+    await runner.RunAsync("packaged app paths follow installed updates", () => PackagedAppUpdateAsync(root));
     await runner.RunAsync("corrupt settings are preserved", () => CorruptSettingsAsync(root));
     await runner.RunAsync("logger persists entries and rotates archives", () => LoggerRotationAsync(root));
     await runner.RunAsync("crashed process is restarted", () => CrashRecoveryAsync(root));
@@ -58,6 +59,50 @@ static async Task SettingsRoundTripAsync(string root)
         "keep-awake preference or screen-saver restore state was not preserved");
     Check(actual.Programs[0].Arguments == "--quiet" && actual.SchemaVersion == 1, "program data was not normalized");
     Check(actual.Programs[0].AttachExisting, "attach-existing preference was not preserved");
+}
+
+static async Task PackagedAppUpdateAsync(string root)
+{
+    const string familyName = "OpenAI.Codex_2p2nqsd0c76g0";
+    const string olderPackage = "OpenAI.Codex_26.1007.2314.0_x64__2p2nqsd0c76g0";
+    const string currentPackage = "OpenAI.Codex_26.1021.3705.0_x64__2p2nqsd0c76g0";
+    const string updatedPackage = "OpenAI.Codex_26.1025.1000.0_x64__2p2nqsd0c76g0";
+    var packageRoot = TestPath(root, "package-refresh", "WindowsApps");
+    Directory.CreateDirectory(Path.Combine(packageRoot, currentPackage, "app"));
+    var currentExecutable = Path.Combine(packageRoot, currentPackage, "app", "ChatGPT.exe");
+    await File.WriteAllTextAsync(currentExecutable, "app");
+
+    var definition = new ProgramDefinition
+    {
+        Name = "ChatGPT",
+        ExecutablePath = Path.Combine(packageRoot, olderPackage, "app", "ChatGPT.exe"),
+        WorkingDirectory = Path.Combine(packageRoot, olderPackage, "app"),
+        AttachExisting = true
+    };
+    var resolver = new WindowsPackageResolver(packageRoot);
+    var initial = resolver.Resolve(definition);
+    Check(initial.IsPackageTarget && initial.IsResolved && initial.DefinitionChanged,
+        "the stale versioned path was not migrated to a package identity");
+    Check(definition.PackageFamilyName == familyName && definition.PackageArchitecture == "x64",
+        "the stable package identity was not extracted from the old path");
+    Check(definition.ExecutablePath == currentExecutable && definition.WorkingDirectory == Path.GetDirectoryName(currentExecutable),
+        "the latest installed package path was not selected");
+    Check(resolver.IsFromSamePackage(definition.ExecutablePath.Replace(currentPackage, olderPackage,
+        StringComparison.Ordinal), definition), "a process from the previous package version was not recognized");
+
+    var store = new JsonSettingsStore(TestPath(root, "package-refresh-settings", "settings.json"));
+    await store.SaveAsync(new AppSettings { Programs = [definition.Copy()] });
+    var restored = (await store.LoadAsync()).Programs.Single();
+    Check(restored.PackageFamilyName == familyName &&
+          restored.PackageRelativeExecutablePath == Path.Combine("app", "ChatGPT.exe"),
+        "the stable package identity was not persisted");
+
+    Directory.CreateDirectory(Path.Combine(packageRoot, updatedPackage, "app"));
+    var updatedExecutable = Path.Combine(packageRoot, updatedPackage, "app", "ChatGPT.exe");
+    await File.WriteAllTextAsync(updatedExecutable, "app");
+    var refreshed = resolver.Resolve(restored);
+    Check(refreshed.IsResolved && refreshed.DefinitionChanged && restored.ExecutablePath == updatedExecutable,
+        "a later package update did not refresh the executable path");
 }
 
 static async Task CorruptSettingsAsync(string root)

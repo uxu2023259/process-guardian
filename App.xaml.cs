@@ -38,6 +38,9 @@ public partial class App : System.Windows.Application
         {
             var store = new JsonSettingsStore();
             var settings = await store.LoadAsync();
+            var packageResolver = new WindowsPackageResolver();
+            foreach (var program in settings.Programs)
+                packageResolver.Resolve(program);
             _settings = settings;
             _logger = new AppLogger();
             _keepAwakeService = new KeepAwakeService();
@@ -66,7 +69,7 @@ public partial class App : System.Windows.Application
                 await _logger.WriteAsync(LogSeverity.Warning, "系统", $"更新登录启动设置失败：{exception.Message}");
             }
 
-            _supervisor = new ProcessSupervisor(settings, store, _logger);
+            _supervisor = new ProcessSupervisor(settings, store, _logger, packageResolver: packageResolver);
             _supervisor.NotificationRequested += OnNotificationRequested;
             _viewModel = new MainViewModel(_supervisor, settings, store, startup, _keepAwakeService, Dispatcher);
             _mainWindow = new MainWindow(_viewModel);

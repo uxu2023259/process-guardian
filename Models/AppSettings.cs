@@ -16,6 +16,10 @@ public sealed class ProgramDefinition
     public string ExecutablePath { get; set; } = "";
     public string Arguments { get; set; } = "";
     public string WorkingDirectory { get; set; } = "";
+    public string PackageFamilyName { get; set; } = "";
+    public string PackageArchitecture { get; set; } = "";
+    public string PackageRelativeExecutablePath { get; set; } = "";
+    public string PackageRelativeWorkingDirectory { get; set; } = "";
     public bool Enabled { get; set; } = true;
     public bool AttachExisting { get; set; }
 
@@ -26,6 +30,10 @@ public sealed class ProgramDefinition
         ExecutablePath = ExecutablePath,
         Arguments = Arguments,
         WorkingDirectory = WorkingDirectory,
+        PackageFamilyName = PackageFamilyName,
+        PackageArchitecture = PackageArchitecture,
+        PackageRelativeExecutablePath = PackageRelativeExecutablePath,
+        PackageRelativeWorkingDirectory = PackageRelativeWorkingDirectory,
         Enabled = Enabled,
         AttachExisting = AttachExisting
     };
