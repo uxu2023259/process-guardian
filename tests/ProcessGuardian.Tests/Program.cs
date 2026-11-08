@@ -28,6 +28,8 @@ try
     await runner.RunAsync("manual pause stops process and prevents restart", () => ManualPauseAsync(root));
     await runner.RunAsync("disposing supervisor leaves process running", () => DisposeLeavesProcessAsync(root));
     await runner.RunAsync("attached running process is left alive when monitoring pauses", () => AttachExistingAsync(root));
+    await runner.RunAsync("window picker attaches the exact PID and persists the target", () => ExactPidAttachAsync(root));
+    await runner.RunAsync("window picker rejects stale, mismatched, and unpersistable targets", () => InvalidPickerTargetsAsync(root));
     await runner.RunAsync("local control pipe adds lists and minimizes", () => ControlPipeAsync(root));
     await runner.RunAsync("program icons load, cache and fall back safely", () => ProgramIconCacheAsync(root));
     await runner.RunAsync("main UI follows the Windows modal-dialog pattern", () => SinglePageUiAsync(root));
@@ -208,6 +210,146 @@ static async Task AttachExistingAsync(string root)
     Check(!Process.GetCurrentProcess().HasExited, "pausing an attached process terminated it");
 }
 
+static async Task ExactPidAttachAsync(string root)
+{
+    var directory = TestPath(root, "picker-exact-pid", "data");
+    Directory.CreateDirectory(directory);
+    var self = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate test runner executable.");
+    await using var targetProcess = await StartChildSleepAsync(Path.Combine(directory, "target"));
+    var store = new JsonSettingsStore(Path.Combine(directory, "settings.json"));
+    await using var supervisor = new ProcessSupervisor(new AppSettings(), store,
+        new AppLogger(Path.Combine(directory, "logs")),
+        Options(failureLimit: 4, retryMs: 40, stableMs: 5000));
+    await supervisor.StartAsync();
+
+    var definition = new ProgramDefinition
+    {
+        Name = "picker-exact-test", ExecutablePath = self,
+        WorkingDirectory = Path.GetDirectoryName(self)!, Enabled = true
+    };
+    await supervisor.AddAndAttachAsync(definition, targetProcess.Id, targetProcess.StartTimeUtcTicks);
+
+    var status = supervisor.Statuses.Single();
+    Check(status.State == ProgramState.Running &&
+          status.Detail.Contains($"PID {targetProcess.Id}", StringComparison.Ordinal),
+        "window-picker attach did not track the exact selected PID");
+    var saved = (await store.LoadAsync()).Programs.Single();
+    Check(saved.Enabled && saved.AttachExisting && saved.ExecutablePath == self,
+        "window-picker target was not persisted as an enabled attach-existing program");
+
+    await supervisor.SetEnabledAsync(definition.Id, enabled: false);
+    Check(IsAlive(targetProcess.Id),
+        "pausing a process selected by the window picker terminated the existing process");
+}
+
+static async Task InvalidPickerTargetsAsync(string root)
+{
+    var directory = TestPath(root, "picker-invalid-targets", "data");
+    Directory.CreateDirectory(directory);
+    var self = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate test runner executable.");
+    await using var targetProcess = await StartChildSleepAsync(Path.Combine(directory, "target"));
+    var store = new JsonSettingsStore(Path.Combine(directory, "settings.json"));
+    await using (var supervisor = new ProcessSupervisor(new AppSettings(), store,
+                     new AppLogger(Path.Combine(directory, "logs")),
+                     Options(failureLimit: 4, retryMs: 40, stableMs: 5000)))
+    {
+        await supervisor.StartAsync();
+        var staleDefinition = new ProgramDefinition
+        {
+            Name = "stale-picker-test", ExecutablePath = self,
+            WorkingDirectory = Path.GetDirectoryName(self)!, Enabled = true
+        };
+        var stalePid = FindUnusedProcessId();
+        var staleRejected = false;
+        try { await supervisor.AddAndAttachAsync(staleDefinition, stalePid, DateTime.UtcNow.Ticks); }
+        catch (ArgumentException) { staleRejected = true; }
+        Check(staleRejected, "a stale PID was not rejected");
+        Check(supervisor.Programs.Count == 0, "a stale PID left a partial target in memory");
+
+        var differentExecutable = Path.Combine(directory, "different.exe");
+        await File.WriteAllTextAsync(differentExecutable, "not an executable");
+        var mismatchedDefinition = new ProgramDefinition
+        {
+            Name = "mismatched-picker-test", ExecutablePath = differentExecutable,
+            WorkingDirectory = directory, Enabled = true
+        };
+        var mismatchRejected = false;
+        try { await supervisor.AddAndAttachAsync(mismatchedDefinition,
+            targetProcess.Id, targetProcess.StartTimeUtcTicks); }
+        catch (InvalidOperationException) { mismatchRejected = true; }
+        Check(mismatchRejected, "a PID whose executable did not match the selected target was accepted");
+        Check(supervisor.Programs.Count == 0, "a mismatched PID left a partial target in memory");
+        Check((await store.LoadAsync()).Programs.Count == 0, "a rejected target was written to settings");
+    }
+
+    var blockedDirectory = TestPath(root, "picker-persistence-failure", "data");
+    Directory.CreateDirectory(blockedDirectory);
+    await using var persistenceTarget = await StartChildSleepAsync(Path.Combine(blockedDirectory, "target"));
+    var fileAsDirectory = Path.Combine(blockedDirectory, "not-a-directory");
+    await File.WriteAllTextAsync(fileAsDirectory, "block");
+    var blockedStore = new JsonSettingsStore(Path.Combine(fileAsDirectory, "settings.json"));
+    var blockedSettings = new AppSettings();
+    await using (var supervisor = new ProcessSupervisor(blockedSettings, blockedStore,
+                     new AppLogger(Path.Combine(blockedDirectory, "logs")),
+                     Options(failureLimit: 4, retryMs: 40, stableMs: 5000)))
+    {
+        await supervisor.StartAsync();
+        var definition = new ProgramDefinition
+        {
+            Name = "picker-save-failure-test", ExecutablePath = self,
+            WorkingDirectory = Path.GetDirectoryName(self)!, Enabled = true
+        };
+        var saveFailed = false;
+        try { await supervisor.AddAndAttachAsync(definition,
+            persistenceTarget.Id, persistenceTarget.StartTimeUtcTicks); }
+        catch (IOException) { saveFailed = true; }
+        Check(saveFailed, "the deliberately unavailable settings path did not fail persistence");
+        Check(supervisor.Programs.Count == 0, "a persistence failure left an in-memory target");
+        Check(blockedSettings.Programs.Count == 0,
+            "a persistence failure left a stale program in the shared settings object");
+        Check(IsAlive(persistenceTarget.Id),
+            "rolling back a failed attach terminated the selected process");
+    }
+}
+
+static int FindUnusedProcessId()
+{
+    for (var processId = int.MaxValue; processId > int.MaxValue - 10_000; processId--)
+    {
+        try { using var _ = Process.GetProcessById(processId); }
+        catch (ArgumentException) { return processId; }
+    }
+    throw new InvalidOperationException("Could not find a test PID that is not in use.");
+}
+
+static async Task<TestChildProcess> StartChildSleepAsync(string directory)
+{
+    Directory.CreateDirectory(directory);
+    var marker = Path.Combine(directory, "ready.marker");
+    var self = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate test runner executable.");
+    var assembly = Assembly.GetEntryAssembly()?.Location
+        ?? throw new InvalidOperationException("Cannot locate test assembly.");
+    var isDotnetHost = Path.GetFileNameWithoutExtension(self).Equals("dotnet", StringComparison.OrdinalIgnoreCase);
+    var arguments = isDotnetHost
+        ? $"\"{assembly}\" --child-sleep \"{marker}\""
+        : $"--child-sleep \"{marker}\"";
+    var process = Process.Start(new ProcessStartInfo(self, arguments)
+    {
+        WorkingDirectory = AppContext.BaseDirectory,
+        UseShellExecute = false
+    }) ?? throw new InvalidOperationException("Could not start the test target process.");
+
+    var timer = Stopwatch.StartNew();
+    while (!File.Exists(marker) && timer.Elapsed < TimeSpan.FromSeconds(5))
+        await Task.Delay(15);
+    if (File.Exists(marker)) return new TestChildProcess(process);
+
+    try { process.Kill(entireProcessTree: true); }
+    catch (InvalidOperationException) { }
+    process.Dispose();
+    throw new InvalidOperationException("The test target process did not enter its sleep state.");
+}
+
 static async Task ControlPipeAsync(string root)
 {
     var directory = TestPath(root, "control-pipe", "data");
@@ -298,6 +440,26 @@ static Task SinglePageUiAsync(string root)
     Check(addPanelMarkup.Contains("AttachExistingBox", StringComparison.Ordinal)
         && addPanelMarkup.Contains("Click=\"Add_Click\"", StringComparison.Ordinal),
         "the embedded add panel is missing its attach-existing option or submit action");
+    Check(addPanelMarkup.Contains("ProcessPickerButton", StringComparison.Ordinal)
+        && addPanelMarkup.Contains("PreviewMouseLeftButtonDown=\"ProcessPicker_PreviewMouseLeftButtonDown\"", StringComparison.Ordinal)
+        && addPanelMarkup.Contains("AutomationProperties.Name", StringComparison.Ordinal),
+        "the add panel is missing its accessible drag-to-select process handle");
+    var targetOverlayMarkup = XDocument.Load(Path.Combine(projectRoot,
+        "Controls", "ProcessTargetOverlay.xaml")).ToString(SaveOptions.DisableFormatting);
+    Check(targetOverlayMarkup.Contains("State.ProcessId", StringComparison.Ordinal)
+        && targetOverlayMarkup.Contains("State.ExecutablePath", StringComparison.Ordinal)
+        && targetOverlayMarkup.Contains("State.StatusMessage", StringComparison.Ordinal),
+        "the desktop target highlight is missing process identity or path feedback");
+    var pickerCode = File.ReadAllText(Path.Combine(projectRoot, "Services", "DesktopWindowPicker.cs"));
+    Check(pickerCode.Contains("WhMouseLl", StringComparison.Ordinal)
+        && pickerCode.Contains("WmLeftButtonUp", StringComparison.Ordinal)
+        && pickerCode.Contains("FinishFromHook(candidate", StringComparison.Ordinal),
+        "the desktop picker is missing its global drag-release capture");
+    var overlayWindowCode = File.ReadAllText(Path.Combine(projectRoot,
+        "Controls", "ProcessTargetOverlayWindow.xaml.cs"));
+    Check(overlayWindowCode.Contains("WsExTransparent", StringComparison.Ordinal)
+        && overlayWindowCode.Contains("WsExNoActivate", StringComparison.Ordinal),
+        "the target highlight overlay could capture input or activate itself");
     var mainCode = File.ReadAllText(Path.Combine(projectRoot, "MainWindow.xaml.cs"));
     Check(mainCode.Contains("CreateAnimation(0, 1, 83", StringComparison.Ordinal)
         && mainCode.Contains("CreateMotionAnimation(12, 0, 167", StringComparison.Ordinal)
@@ -385,6 +547,26 @@ static void Check(bool condition, string message)
 }
 
 enum ChildKind { Sleep, Exit }
+
+sealed class TestChildProcess(Process process) : IAsyncDisposable
+{
+    public int Id => process.Id;
+    public long StartTimeUtcTicks => process.StartTime.ToUniversalTime().Ticks;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException) { }
+
+        try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)); }
+        catch (TimeoutException) { }
+        catch (InvalidOperationException) { }
+        process.Dispose();
+    }
+}
 
 sealed class SupervisorFixture : IAsyncDisposable
 {

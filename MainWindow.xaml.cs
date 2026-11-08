@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using ProcessGuardian.Controls;
 using ProcessGuardian.Models;
+using ProcessGuardian.Services;
 using ProcessGuardian.ViewModels;
 
 namespace ProcessGuardian;
@@ -14,14 +15,29 @@ public partial class MainWindow : Window
     private bool _addPanelOpen;
     private bool _transitionRunning;
     private bool _addingProgram;
+    private bool _windowPickerActive;
+    private bool _closed;
+    private readonly DesktopWindowPicker _desktopWindowPicker;
+    private readonly ProcessTargetOverlayWindow _processTargetOverlay;
 
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _desktopWindowPicker = new DesktopWindowPicker(Dispatcher);
+        _processTargetOverlay = new ProcessTargetOverlayWindow();
         DataContext = viewModel;
         AddPanel.AddRequested += AddPanel_AddRequested;
         AddPanel.CancelRequested += AddPanel_CancelRequested;
+        AddPanel.ProcessPickerRequested += AddPanel_ProcessPickerRequested;
+        _desktopWindowPicker.PreviewChanged += OnProcessPickerPreviewChanged;
+        _desktopWindowPicker.DragStarted += OnProcessPickerDragStarted;
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _desktopWindowPicker.Dispose();
+            if (_processTargetOverlay.IsVisible) _processTargetOverlay.Close();
+        };
         Loaded += (_, _) => FitToWorkArea();
     }
 
@@ -96,6 +112,91 @@ public partial class MainWindow : Window
             AddPanel.IsEnabled = true;
             _addingProgram = false;
         }
+    }
+
+    private async void AddPanel_ProcessPickerRequested(bool mouseButtonAlreadyDown)
+    {
+        if (_windowPickerActive || _addingProgram) return;
+
+        _windowPickerActive = true;
+        AddPanel.IsEnabled = false;
+        try
+        {
+            var pickTask = _desktopWindowPicker.Start(waitingForMouseDown: !mouseButtonAlreadyDown);
+            if (mouseButtonAlreadyDown)
+            {
+                Mouse.Capture(null);
+                Hide();
+            }
+
+            var result = await pickTask;
+            if (_closed) return;
+
+            _processTargetOverlay.Hide();
+            if (!IsVisible)
+            {
+                Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+            }
+
+            var target = result.Target;
+            if (result.Canceled || target is null || target.ErrorMessage is not null ||
+                string.IsNullOrWhiteSpace(target.ExecutablePath))
+            {
+                AddPanel.ShowError(result.Message ?? target?.ErrorMessage ?? "未能读取所选程序路径。");
+                return;
+            }
+
+            var executablePath = target.ExecutablePath;
+            var definition = new ProgramDefinition
+            {
+                Name = string.IsNullOrWhiteSpace(target.ProcessName)
+                    ? Path.GetFileNameWithoutExtension(executablePath)
+                    : target.ProcessName,
+                ExecutablePath = executablePath,
+                WorkingDirectory = Path.GetDirectoryName(executablePath) ?? "",
+                Enabled = true,
+                AttachExisting = true
+            };
+
+            _addingProgram = true;
+            var processStartTimeUtcTicks = target.ProcessStartTimeUtcTicks
+                ?? throw new InvalidOperationException("无法确认所选程序实例，请重新拖动选择。");
+            await _viewModel.AddAndAttachAsync(definition, target.ProcessId, processStartTimeUtcTicks);
+            await HideAddPanelAsync(allowWhileAdding: true);
+            AddPanel.ResetForm();
+        }
+        catch (Exception exception)
+        {
+            _processTargetOverlay.Hide();
+            if (!_closed && !IsVisible)
+            {
+                Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+            }
+            if (!_closed) AddPanel.ShowError(exception.Message);
+        }
+        finally
+        {
+            if (!_closed) AddPanel.IsEnabled = true;
+            _addingProgram = false;
+            _windowPickerActive = false;
+        }
+    }
+
+    private void OnProcessPickerPreviewChanged(DesktopWindowPickerPreview preview)
+    {
+        if (_closed || !_windowPickerActive) return;
+        _processTargetOverlay.UpdatePreview(preview);
+    }
+
+    private void OnProcessPickerDragStarted()
+    {
+        if (_closed || !_windowPickerActive) return;
+        Mouse.Capture(null);
+        if (IsVisible) Hide();
     }
 
     private async void AddPanel_CancelRequested() => await HideAddPanelAsync();

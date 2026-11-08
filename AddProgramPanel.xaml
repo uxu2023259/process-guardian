@@ -65,6 +65,16 @@
         <TextBlock Text="程序退出或崩溃后，守护器会自动恢复。"
                    FontSize="11" Foreground="#605E5C" Margin="0,4,0,0"/>
       </StackPanel>
+      <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0">
+        <Button x:Name="ProcessPickerButton" Content="⌖  拖动选取进程"
+                Style="{StaticResource QuietButton}" Padding="10,7"
+                PreviewMouseLeftButtonDown="ProcessPicker_PreviewMouseLeftButtonDown"
+                Click="ProcessPicker_Click"
+                AutomationProperties.Name="拖动光标选取正在运行的进程"
+                ToolTip="按住光标并拖到目标程序窗口，松开后接管该进程。"/>
+        <TextBlock Text="按住并拖到程序窗口" FontSize="9" Foreground="#605E5C"
+                   HorizontalAlignment="Center" Margin="0,3,0,0"/>
+      </StackPanel>
     </DockPanel>
 
     <StackPanel Grid.Row="1" Margin="0,0,0,12">

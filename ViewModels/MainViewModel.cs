@@ -79,6 +79,18 @@ public sealed class MainViewModel : ObservableObject
         });
     }
 
+    public async Task AddAndAttachAsync(ProgramDefinition definition, int processId,
+        long processStartTimeUtcTicks)
+    {
+        await _supervisor.AddAndAttachAsync(definition, processId, processStartTimeUtcTicks);
+        var status = _supervisor.Statuses.Single(item => item.Id == definition.Id);
+        await _dispatcher.InvokeAsync(() =>
+        {
+            Programs.Add(CreateRow(definition, status));
+            Raise(nameof(ProgramCount));
+        });
+    }
+
     public async Task RemoveAsync(Guid id)
     {
         await _supervisor.RemoveAsync(id);

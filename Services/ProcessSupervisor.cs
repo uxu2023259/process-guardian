@@ -96,6 +96,89 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         }
     }
 
+    public async Task AddAndAttachAsync(ProgramDefinition definition, int processId,
+        long processStartTimeUtcTicks,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (processId <= 0) throw new ArgumentOutOfRangeException(nameof(processId));
+        if (processStartTimeUtcTicks <= 0) throw new ArgumentOutOfRangeException(nameof(processStartTimeUtcTicks));
+
+        var copy = definition.Copy();
+        if (copy.Id == Guid.Empty) copy.Id = Guid.NewGuid();
+        copy.Enabled = true;
+        copy.AttachExisting = true;
+
+        var target = _packageResolver.Resolve(copy);
+        if (!target.IsResolved || !File.Exists(target.ExecutablePath))
+            throw new FileNotFoundException(target.Error ?? "所选程序文件已不存在，无法接管。", target.ExecutablePath);
+
+        Process? process = null;
+        try
+        {
+            if (processId == Environment.ProcessId)
+                throw new InvalidOperationException("不能将进程守护器自身加入保护列表。");
+
+            process = Process.GetProcessById(processId);
+            if (process.HasExited)
+                throw new InvalidOperationException("所选程序已退出，请重新拖动选择。");
+
+            if (process.StartTime.ToUniversalTime().Ticks != processStartTimeUtcTicks)
+                throw new InvalidOperationException("所选 PID 已被其他程序复用，请重新拖动选择。");
+
+            var processPath = process.MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(processPath))
+                throw new InvalidOperationException("无法读取所选程序的路径，可能是权限不足。");
+
+            var sameExecutable = string.Equals(Path.GetFullPath(processPath),
+                Path.GetFullPath(target.ExecutablePath), StringComparison.OrdinalIgnoreCase);
+            if (!sameExecutable && !_packageResolver.IsFromSamePackage(processPath, copy))
+                throw new InvalidOperationException("所选窗口对应的程序已变化，请重新拖动选择。");
+
+            var runtime = new TargetRuntime(copy);
+            lock (_sync)
+            {
+                if (_targets.Values.Any(existing => IsSameProgram(existing.Definition, copy)))
+                    throw new InvalidOperationException("该程序已经在保护列表中。");
+                if (_targets.ContainsKey(copy.Id)) throw new InvalidOperationException("该程序配置已存在。");
+                _targets.Add(copy.Id, runtime);
+            }
+
+            try
+            {
+                await runtime.Gate.WaitAsync(cancellationToken);
+                try
+                {
+                    if (process.HasExited)
+                        throw new InvalidOperationException("所选程序在接管前已退出，请重新选择。");
+
+                    TrackProcess(runtime, process, isAttached: true);
+                    process = null;
+                    var attached = runtime.Process!;
+                    Publish(runtime, ProgramState.Running, $"已接管现有程序 · PID {attached.Id}");
+                    await SaveProgramsAsync(cancellationToken);
+                }
+                finally { runtime.Gate.Release(); }
+            }
+            catch
+            {
+                lock (_sync)
+                {
+                    _targets.Remove(copy.Id);
+                    _settings.Programs = _targets.Values.Select(target => target.Definition.Copy()).ToList();
+                }
+                if (runtime.Process is not null)
+                {
+                    DetachProcess(runtime);
+                    runtime.Process.Dispose();
+                    runtime.Process = null;
+                }
+                throw;
+            }
+        }
+        finally { process?.Dispose(); }
+    }
+
     public async Task UpdateAsync(ProgramDefinition definition, CancellationToken cancellationToken = default)
     {
         TargetRuntime runtime;
@@ -437,6 +520,21 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             if (!ReferenceEquals(candidate, selected)) candidate.Dispose();
         process = selected;
         return true;
+    }
+
+    private bool IsSameProgram(ProgramDefinition existing, ProgramDefinition candidate)
+    {
+        try
+        {
+            if (string.Equals(Path.GetFullPath(existing.ExecutablePath),
+                    Path.GetFullPath(candidate.ExecutablePath), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException) { }
+
+        return !string.IsNullOrWhiteSpace(existing.PackageFamilyName) &&
+               string.Equals(existing.PackageFamilyName, candidate.PackageFamilyName, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(existing.PackageArchitecture, candidate.PackageArchitecture, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int SafeExitCode(Process process)

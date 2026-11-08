@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using ProcessGuardian.Models;
 using Forms = System.Windows.Forms;
@@ -15,6 +16,7 @@ public partial class AddProgramPanel : System.Windows.Controls.UserControl
 
     public event Action<ProgramDefinition>? AddRequested;
     public event Action? CancelRequested;
+    public event Action<bool>? ProcessPickerRequested;
 
     public void ResetForm()
     {
@@ -25,11 +27,27 @@ public partial class AddProgramPanel : System.Windows.Controls.UserControl
         EnabledBox.IsChecked = true;
         AttachExistingBox.IsChecked = false;
         FormMessage.Text = "";
+        FormMessage.Foreground = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(164, 38, 44));
     }
 
     public void FocusName() => NameBox.Focus();
 
-    public void ShowError(string message) => FormMessage.Text = message;
+    public void ShowError(string message)
+    {
+        FormMessage.Foreground = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(164, 38, 44));
+        FormMessage.Text = message;
+    }
+
+    private void ProcessPicker_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        ProcessPickerRequested?.Invoke(true);
+    }
+
+    private void ProcessPicker_Click(object sender, RoutedEventArgs e) =>
+        ProcessPickerRequested?.Invoke(false);
 
     private void BrowseExecutable_Click(object sender, RoutedEventArgs e)
     {
