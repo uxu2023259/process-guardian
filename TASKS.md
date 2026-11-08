@@ -8,10 +8,10 @@ Resource status: VERIFIED via Codex usage limits; latest check is 18% used in th
 - [x] Migrate existing Codex entries and resolve the current executable for attach/restart.
 - [x] Add regression coverage for update/path changes and persisted identity (13 checks pass).
 - [x] Build version 0.1.41, publish the single-file executable, and verify the live target.
-- [ ] Review, commit, and push the changes.
+- [x] Review, commit, and push the changes.
 
 Last verified: 13/13 checks pass; the existing stale setting migrated to package family `OpenAI.Codex_2p2nqsd0c76g0`, saved version 26.1021.3705.0, and is attached to running ChatGPT PID 4672 under ProcessGuardian 0.1.42.
-Next: commit and push the reviewed change.
+Complete: the reviewed changes are committed and pushed with the process picker release.
 
 ---
 
@@ -40,14 +40,14 @@ Progress:
 - [x] PID 13764 was closed manually; 0.1.42 now runs from the standard path as PID 27296 with `--startup`. The Run registry value remains unchanged.
 - [x] Review the final diff, confirm `git diff --check`, verify artifact versions/hashes, confirm the official process/startup registration stayed unchanged, and close the isolated preview.
 
-Current milestone: Release 0.1.42 is running from the standard path. `ProcessGuardian.Control list` confirms that Codex PID 4672, PortBridge PID 14028, and Mihomo Party PID 21236 remain attached without restart-count increases. Runtime cross-window drag and click-through remain unverified; source changes are uncommitted.
+Current milestone: GitHub Release v1.0.1 is published from commit `7a1d46d`. Local ProcessGuardian 0.1.42 remains running from the standard path; `ProcessGuardian.Control list` previously confirmed that Codex PID 4672, PortBridge PID 14028, and Mihomo Party PID 21236 remain attached without restart-count increases. Runtime cross-window drag and click-through remain unverified.
 Known constraint: the real desktop picker drag has not been exercised through CUA.
-Next: publish the reviewed source as GitHub release v1.0.1; the real desktop drag remains a manual follow-up.
+Next: manually exercise the picker with a real desktop pointer; the published release is available at https://github.com/uxu2023259/process-guardian/releases/tag/v1.0.1.
 
 Release delivery (2026-11-08):
 - [x] Confirm the current GitHub release is v1.0.0, built from source version 0.1.41, and the repository workflow publishes a win-x64 archive when a `v*` tag is pushed.
 - [x] Build a local v1.0.1 release archive from the 0.1.42 source with the repository's .NET SDK 10.0.401; the release workflow will independently build and attach its archive from the pushed tag.
-- [ ] Commit and push the reviewed feature changes to `main`.
-- [ ] Push tag `v1.0.1` and verify the GitHub Actions release and downloadable asset.
+- [x] Commit and push the reviewed feature changes to `main` as `7a1d46d`.
+- [x] Push tag `v1.0.1`; GitHub Actions run 42456645358 completed successfully and published `ProcessGuardian-v1.0.1-win-x64.zip` (SHA256 `5be9baabd4411d24527d43a24ba197060ff9fda3c741e1417a90a88921a1452b`).
 
 Release preflight resource status: VERIFIED via Codex Desktop `get_usage_limits` on 2026-11-08; 5-hour window 2% used and 7-day window 4% used. DeepSeek was not used for this release task.
